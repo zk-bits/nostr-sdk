@@ -1,0 +1,82 @@
+{
+  "name": "@vbyte/nostr-sdk",
+  "version": "0.0.2",
+  "description": "Software development kit for the nostr protocol.",
+  "author": "Christopher Scott",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cmdcode/nostr-sdk"
+  },
+  "unpkg": "./dist/script.js",
+  "files": [
+    "README.md",
+    "LICENSE",
+    "dist",
+    "src"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./crypto": {
+      "import": "./dist/crypto/index.js",
+      "types": "./dist/crypto/index.d.ts",
+      "default": "./dist/crypto/index.js"
+    },
+    "./lib": {
+      "import": "./dist/lib/index.js",
+      "types": "./dist/lib/index.d.ts",
+      "default": "./dist/lib/index.js"
+    },
+    "./schema": {
+      "import": "./dist/schema/index.js",
+      "types": "./dist/schema/index.d.ts",
+      "default": "./dist/schema/index.js"
+    }
+  },
+  "scripts": {
+    "build": "./scripts/build.sh",
+    "check": "npx tsc --project tsconfig.json --noEmit",
+    "dev:relay": "npx tsx ./dev/scripts/relay.ts",
+    "lint": "biome check src/",
+    "format": "biome format src/ --write",
+    "package": "./scripts/package.sh",
+    "release": "./scripts/release.sh",
+    "scratch": "npm run script ./dev/scratch.ts",
+    "script": "tsx --tsconfig ./dev/tsconfig.json",
+    "test": "npm run script ./test/runner.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.3.10",
+    "@rollup/plugin-commonjs": "^29.0.0",
+    "@rollup/plugin-json": "^6.1.0",
+    "@rollup/plugin-node-resolve": "^16.0.3",
+    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-typescript": "^12.3.0",
+    "@types/node": "^25.0.3",
+    "@types/tape": "^5.8.1",
+    "@types/ws": "^8.18.1",
+    "faucet": "^0.0.4",
+    "rollup": "^4.54.0",
+    "tape": "^5.9.0",
+    "tslib": "^2.8.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "ws": "^8.18.3"
+  },
+  "peerDependencies": {
+    "ws": "^8.18.3"
+  },
+  "dependencies": {
+    "@noble/ciphers": "^1.0.0",
+    "@noble/curves": "^1.9.6",
+    "@noble/hashes": "^1.8.0",
+    "@scure/base": "^1.2.6",
+    "@vbyte/buff": "^1.0.2",
+    "websocket-polyfill": "^1.0.0",
+    "zod": "^4.2.1"
+  }
+}
