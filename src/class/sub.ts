@@ -2,10 +2,11 @@ import { KeyCache }     from '@/class/cache.js'
 import { EventEmitter } from '@/class/emitter.js'
 import { NostrSocket }  from '@/class/socket.js'
 
-import { generate_label, now } from '@/lib/index.js'
+import { assert_ok, generate_label, now } from '@/lib/index.js'
 
 import type {
   EventFilter,
+  NostrSocketConfig,
   RelayClosedMessage,
   RelayEventMessage,
   RelayMessage,
@@ -19,6 +20,7 @@ export class NostrSubscription extends EventEmitter <{
   event  : [ SignedEvent ]
 }> {
 
+  private readonly _config  : NostrSocketConfig
   private readonly _filters : EventFilter[]
   private readonly _id      : string
   private readonly _socket  : NostrSocket
@@ -36,6 +38,8 @@ export class NostrSubscription extends EventEmitter <{
   ) {
     // Initialize the class.
     super()
+    // Initialize the configuration.
+    this._config  = socket.config
     // Initialize the filters.
     this._filters = Array.isArray(filters) ? filters : [ filters ]
     // Initialize the subscription ID.
@@ -44,6 +48,10 @@ export class NostrSubscription extends EventEmitter <{
     this._socket = socket
     // Subscribe to the message event.
     this._socket.on('message', (msg) => this._handler(msg))
+  }
+
+  public get config () {
+    return this._config
   }
 
   public get filters () {
@@ -75,7 +83,7 @@ export class NostrSubscription extends EventEmitter <{
     // If the subscription is not active, return.
     if (!this.state.active) return
     // If the subscription is initialized and there are retries left,
-    if (this.state.retries < this.socket.config.max_retries) {
+    if (this.state.retries < this.config.max_retries) {
       // Update the retry count.
       this._retries += 1
     } else {
@@ -140,7 +148,7 @@ export class NostrSubscription extends EventEmitter <{
 
   private _keep_alive () {
     // Define the subscription timeout.
-    const timeout = this.socket.config.sub_timeout
+    const timeout = this.config.sub_timeout
     // If the keep-alive timer exists, clear it.
     clearTimeout(this._timer)
     // Set a new timer to resubscribe.
@@ -153,12 +161,12 @@ export class NostrSubscription extends EventEmitter <{
   }
 
   public listen (duration? : number) : Promise<SignedEvent[]> {
-    // If the subscription is not active, activate the subscription.
-    if (!this.is_active) this._subscribe()
     // Initialize the results array.
     const results : SignedEvent[] = []
     // Define the timeout.
-    const timeout = duration ?? this.socket.config.sub_timeout
+    const timeout = duration ?? this.config.msg_timeout
+    // If the subscription is not active, subscribe to the EOSE event.
+    if (!this.is_active) this._subscribe()
     // Create a promise to resolve the events.
     return new Promise((resolve) => {
       // Set a timeout to reject the promise if the request times out.
@@ -183,7 +191,7 @@ export class NostrSubscription extends EventEmitter <{
     // If the subscription is already active, return the subscription.
     if (this.state.active) return this
     // Define the subscription timeout.
-    const timeout = this.socket.config.sub_timeout
+    const timeout = this.config.msg_timeout
     // Create a promise to resolve the subscription.
     return new Promise<NostrSubscription>((resolve, reject) => {
       // Set a timeout to reject the promise if the request times out.
@@ -222,8 +230,9 @@ export class SubscriptionManager extends EventEmitter <{
   event  : [ SignedEvent ]
 }> {
 
-  private readonly _cache : KeyCache
-  private readonly _subs  : Map<string, NostrSubscription>
+  private readonly _cache  : KeyCache
+  private readonly _config : NostrSocketConfig
+  private readonly _subs   : Map<string, NostrSubscription>
 
   private _active : boolean = false
 
@@ -231,11 +240,16 @@ export class SubscriptionManager extends EventEmitter <{
     subscriptions : NostrSubscription[],
     cache_size    : number = 1000
   ) {
+    // Assert that the subscriptions array is not empty.
+    assert_ok(subscriptions.length > 0, 'subscriptions are required')
+    // Initialize the class.
     super()
     // Initialize the cache.
-    this._cache = new KeyCache(cache_size)
+    this._cache  = new KeyCache(cache_size)
+    // Initialize the configuration.
+    this._config = subscriptions[0].socket.config
     // Initialize the subscriptions map.
-    this._subs  = new Map(subscriptions.map(sub => [ sub.socket.url, sub ]))
+    this._subs   = new Map(subscriptions.map(sub => [ sub.socket.url, sub ]))
     // Subscribe to the subscriptions.
     this._subs.forEach(sub => {
       sub.on('closed', (reason) => this._close(sub, reason))
@@ -246,6 +260,10 @@ export class SubscriptionManager extends EventEmitter <{
 
   public get cache () {
     return this._cache
+  }
+
+  public get config () {
+    return this._config
   }
 
   public get is_active () {
@@ -293,7 +311,7 @@ export class SubscriptionManager extends EventEmitter <{
     await Promise.allSettled(queries).then(results => {
       results.forEach(result => {
         if (result.status === 'fulfilled') {
-          result.value.forEach(event => events.add(event))
+          result.value.forEach(event => void events.add(event))
         }
       })
     })
@@ -305,7 +323,9 @@ export class SubscriptionManager extends EventEmitter <{
     return this._subs.get(id)
   }
 
-  public async subscribe (timeout : number = 5000) : Promise<SubscriptionManager> {
+  public async subscribe () : Promise<SubscriptionManager> {
+    // Define the timeout.
+    const timeout = this.config.msg_timeout
     // Create a promise to resolve the subscription manager.
     return new Promise<SubscriptionManager>((resolve, reject) => {
       // Set a timeout to reject the promise if the request times out.
@@ -322,7 +342,7 @@ export class SubscriptionManager extends EventEmitter <{
 
   public unsubscribe () {
     // Unsubscribe from all subscriptions.
-    this.subs.forEach(sub => sub.unsubscribe())
+    this.subs.forEach(sub => void sub.unsubscribe())
     // Clear the subscriptions map.
     this._subs.clear()
     // Set the active state to false.

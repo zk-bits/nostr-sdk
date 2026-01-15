@@ -40,14 +40,15 @@
   "scripts": {
     "build": "./scripts/build.sh",
     "check": "npx tsc --project tsconfig.json --noEmit",
-    "dev:relay": "npx tsx ./dev/scripts/relay.ts",
     "lint": "biome check src/",
     "format": "biome format src/ --write",
     "package": "./scripts/package.sh",
     "release": "./scripts/release.sh",
-    "scratch": "npm run script ./dev/scratch.ts",
-    "script": "tsx --tsconfig ./dev/tsconfig.json",
-    "test": "npm run script ./test/runner.ts"
+    "scratch": "npm run script ./test/scratch.ts",
+    "script": "tsx --tsconfig ./test/tsconfig.json",
+    "test": "npm run script ./test/runner.ts",
+    "test:socket": "npm run script ./test/scripts/socket.ts",
+    "test:relay": "npm run script ./test/scripts/relay.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.3.10",

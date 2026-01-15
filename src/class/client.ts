@@ -68,7 +68,7 @@ export class NostrClient extends EventEmitter <{
 
   public close () {
     // Close all sockets.
-    this.sockets.forEach(socket => socket.close())
+    this.sockets.forEach(socket => void socket.close())
   }
 
   public async connect () : Promise<void> {
@@ -102,6 +102,6 @@ export class NostrClient extends EventEmitter <{
     // Add the subscription manager to the subscriptions map.
     this._subs.set(sub_id, manager)
     // Return a promise that resolves when the first subscription is active.
-    return manager.subscribe(this.config.sub_timeout)
+    return manager.subscribe()
   }
 }

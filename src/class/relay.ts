@@ -12,8 +12,8 @@ import {
   parse_client_message,
   validate_relay_message,
   verify_event,
-  match_filter,
-  parse_error
+  parse_error,
+  match_any_filter
 } from '@/lib/index.js'
 
 import {
@@ -25,7 +25,6 @@ import {
   RelayMessage,
   SignedEvent
 } from '@/types/index.js'
-
 
 export const RELAY_CONFIG : RelayConfig = {
   debug      : false,
@@ -204,7 +203,7 @@ export class NostrRelay extends EventEmitter<{
       // If the session is not found, continue.
       if (!session) continue
       // Get the events from the cache.
-      if (match_filter(event, filters)) {
+      if (match_any_filter(event, filters)) {
         // Send the event to the client.
         session.send([ 'EVENT', sub_id, event ])
       }

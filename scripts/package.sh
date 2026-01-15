@@ -23,4 +23,8 @@ npm run test | npx faucet
 echo "🏗️  Building project..."
 npm run build
 
+# Step 5: Package
+echo "🔄 Packaging project..."
+npx rollup -c rollup.config.js
+
 echo "✅ Package process completed successfully!"

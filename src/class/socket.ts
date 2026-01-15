@@ -1,4 +1,3 @@
-import { DEBUG }             from '@/const.js'
 import { EventEmitter }      from '@/class/emitter.js'
 import { MessageQueue }      from '@/class/queue.js'
 import { NostrSubscription } from '@/class/sub.js'
@@ -82,7 +81,7 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
 
   private _close () {
     // Unsubscribe from all subscriptions.
-    this._subs.forEach(sub => sub.unsubscribe())
+    this._subs.forEach(sub => void sub.unsubscribe())
     // Clear the subscriptions map.
     this._subs.clear()
     // Set the socket to not initialized.
@@ -93,7 +92,7 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
 
   private _error (error : unknown) {
     // Log the error to console.
-    if (DEBUG && error) console.error(error)
+    console.error(error)
     // Emit an error event.
     this.emit('error', null, String(error))
   }

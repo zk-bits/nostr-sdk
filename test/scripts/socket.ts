@@ -19,9 +19,9 @@ const template = create_event({
 
 const event = sign_event(template, seckey)
 
-const socket = new NostrSocket('wss://relay.primal.net')
+const socket = new NostrSocket('ws://localhost:8080')
 
-socket.all(console.log)
+// socket.all(console.log)
 
 socket.on('closed', () => {
   process.exit(0)
@@ -30,9 +30,11 @@ socket.on('closed', () => {
 try {
   await socket.connect()
 
-  const subscription = await socket.subscribe(filter)
+  // const subscription = await socket.subscribe(filter)
 
-  console.log('subscription', subscription)
+  // console.log('subscription', subscription)
+
+  // const listener = subscription.listen()
 
   const receipt = await socket.publish(event)
 
@@ -41,6 +43,10 @@ try {
   const result = await socket.query(filter)
 
   console.log('result', result)
+
+  // const events = await listener
+
+  // console.log('events', events)
 } catch (error) {
   console.error('error', error)
 } finally {

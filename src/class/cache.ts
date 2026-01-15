@@ -1,3 +1,4 @@
+import { PRUNE_INTERVAL }   from '@/const.js'
 import { is_event_expired } from '@/lib/event.js'
 
 import {
@@ -9,8 +10,6 @@ import type {
   EventFilter,
   SignedEvent
 } from '@/types/index.js'
-
-export const PRUNE_INTERVAL = 30
 
 export class KeyCache {
   private readonly _cache : Set<string> = new Set()
@@ -62,7 +61,7 @@ export class EventCache {
 
   constructor (prune_ival : number = PRUNE_INTERVAL) {
     this._cache = new Map()
-    this._ival  = prune_ival
+    this._ival  = prune_ival * 1000
     // Start the cache pruning.
     this._start()
   }
@@ -71,7 +70,7 @@ export class EventCache {
     // Clear the existing timer if it exists.
     clearInterval(this._timer)
     // Set a new timer to prune the cache.
-    this._timer = setInterval(() => this.prune(), this._ival * 1000).unref()
+    this._timer = setInterval(() => this.prune(), this._ival).unref()
   }
 
   public get cache () {
@@ -117,8 +116,6 @@ export class EventCache {
       if (is_event_expired(event, stamp)) {
         // Delete the event from the cache.
         this._cache.delete(key)
-        // Continue to the next event.
-        continue
       }
     }
   }

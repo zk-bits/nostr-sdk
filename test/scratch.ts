@@ -2,20 +2,25 @@ import { NostrSocket } from '@/class/socket.js'
 
 import { gen_seckey, get_pubkey }   from '@/crypto/ecc.js'
 import { create_event, sign_event } from '@/lib/event.js'
+import { match_filter } from '@/lib/filter.js'
 import { sleep }                    from '@/lib/util.js'
+import { EventFilter, EventTemplate } from '@/types/event.js'
 
 const seckey = gen_seckey()
 const pubkey = get_pubkey(seckey)
+const hash   = '82e748fc9f0c2fd6b9366c9dc2b6732c2d8e76e4de8615c1c3418e29b5f40547'
 
-const filter = {
+const filter : EventFilter = {
   kinds   : [ 1 ],
-  authors : [ pubkey ]
+  authors : [ pubkey ],
+  '#h'    : [ hash ]
 }
 
-const template = create_event({
+const template : EventTemplate = create_event({
   content : 'Hello, world!',
   kind    : 1,
-  pubkey  : pubkey
+  pubkey  : pubkey,
+  tags    : [ [ 'h', hash ] ]
 })
 
 const event = sign_event(template, seckey)
@@ -25,27 +30,13 @@ const socket = new NostrSocket('ws://localhost:8080')
 socket.all(console.log)
 
 try {
-  await socket.connect()
-
-  console.log('[ scratch ] connected to relay')
-
-  const sub = await socket.subscribe(filter)
-
-  sub.all(console.log)
-
-  console.log('[ scratch ] subscribed to filter')
-
-  console.log('[ scratch ] sub state', sub.state)
-
   const receipt = await socket.publish(event)
 
   console.log('[ scratch ] published event')
 
   console.dir(receipt, { depth: null })
 
-  await sleep(1000)
-
-  console.log('[ scratch ] sub state', sub.state)
+  await sleep(500)
 
   const result = await socket.query(filter)
 

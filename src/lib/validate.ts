@@ -1,4 +1,3 @@
-import { DEBUG }             from '@/const.js'
 import { exec, parse_error } from '@/lib/util.js'
 
 import * as SCHEMA from '@/schema/index.js'
@@ -37,8 +36,6 @@ export function parse_client_message (
   const schema = SCHEMA.MESSAGE.client_message
   // Parse the message.
   const parsed = schema.safeParse(message)
-  // If the message is not valid and debug mode is enabled, log the error.
-  if (DEBUG && !parsed.success) console.error(parsed.error)
   // Return the result based on the success of the parser.
   return (parsed.success)
     ? { ok : true,  result : parsed.data as ClientMessage }
@@ -61,8 +58,6 @@ export function parse_relay_message (
   const schema = SCHEMA.MESSAGE.relay_message
   // Parse the message.
   const parsed = schema.safeParse(message)
-  // If the message is not valid and debug mode is enabled, log the error.
-  if (DEBUG && !parsed.success) console.error(parsed.error)
   // Return the result based on the success of the parser.
   return (parsed.success)
     ? { ok : true,  result : parsed.data as RelayMessage }

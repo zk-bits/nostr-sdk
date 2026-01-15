@@ -5,7 +5,7 @@ export interface EventFilter {
   since   ?: number
   until   ?: number
   limit   ?: number
-  [ key : string ] : any | undefined
+  [ key : string ] : any
 }
 
 export interface EventConfig {

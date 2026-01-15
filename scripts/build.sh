@@ -14,17 +14,9 @@ cp package.json $DIRECTORY/package.json
 sed -i "s#$DIRECTORY#.#g" "$DIRECTORY/package.json"
 
 # Build the current project source using tsc and rollup.
-echo "Running TypeScript compiler..."
 npx tsc
 if [ $? -ne 0 ]; then
     echo "TypeScript build failed."
-    exit 1
-fi
-
-echo "Running Rollup..."
-npx rollup -c rollup.config.js
-if [ $? -ne 0 ]; then
-    echo "Rollup build failed."
     exit 1
 fi
 

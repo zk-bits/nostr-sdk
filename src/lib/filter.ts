@@ -30,56 +30,78 @@ export function process_filters (
   return results
 }
 
+export function match_any_filter (
+  event   : SignedEvent,
+  filters : EventFilter[]
+) : boolean {
+  // For each filter:
+  for (const filter of filters) {
+    // If the event matches the filter,
+    if (match_filter(event, filter)) {
+      // Return true.
+      return true
+    }
+  }
+  // If no filter matches, return false.
+  return false
+}
+
 export function match_filter (
   event  : SignedEvent,
   filter : EventFilter = {}
 ) : boolean {
+  // Unpack the filter object.
   const { authors, ids, kinds, since, until, limit, ...rest } = filter
-
-  const tag_filters : string[][] = get_tag_filters(rest)
-
-  if (ids !== undefined && !ids.includes(event.id)) {
-    return false
-  } else if (since   !== undefined && event.created_at < since) {
-    return false
-  } else if (until   !== undefined && event.created_at > until) {
-    return false
-  } else if (authors !== undefined && !authors.includes(event.pubkey)) {
-    return false
-  } else if (kinds   !== undefined && !kinds.includes(event.kind)) {
-    return false
-  } else if (tag_filters.length > 0) {
-    return match_tags(filter, event.tags)
-  } else {
-    return true
+  // Get the tag filters from the rest of the filter object.
+  const tag_filters = get_tag_filters(rest)
+  // Initialize the matches flag.
+  let matches = false
+  // Check if the event ID filter is defined, and the ID matches the filter.
+  if (ids && ids.includes(event.id)) {
+    matches = true
+  // Check if the author filter is defined, and the author matches the filter.
+  } else if (authors && authors.includes(event.pubkey)) {
+    matches = true
+  // Check if the kind filter is defined, and the kind matches the filter.
+  } else if (kinds && kinds.includes(event.kind)) {
+    matches = true
+  // Check if any tag filters are defined, and the tags match the filters.
+  } else if (match_tags(tag_filters, event.tags)) {
+    matches = true
   }
+  // Check if the "created at" timestamp is outside the since and until filters.
+  if ((since && event.created_at < since) || (until && event.created_at > until)) {
+    matches = false
+  }
+  // Return the matches flag.
+  return matches
 }
 
 export function match_tags (
-  filter : EventFilter,
-  tags   : string[][]
+  filters : [ string, string ][],
+  tags    : string[][]
 ) : boolean {
   // For each filter entry:
-  for (const [ key, ...terms ] of get_tag_filters(filter)) {
+  for (const [ key, value ] of filters) {
     // For each tag entry:
-    for (const [ tag, param ] of tags) {
+    for (const [ tag, ...params ] of tags) {
       // If the tag matches the filter,
-      // and param is included in terms:
-      if (tag === key && terms.includes(param)) {
+      // and params include the filter value:
+      if (key === tag && params.includes(value)) {
         // Return true.
         return true
       }
     }
   }
-  // If no tags match the filters, return false.
+  // If no tag matches, return false.
   return false
 }
 
-export function get_tag_filters (filter : EventFilter) : string[][] {
+export function get_tag_filters (filter : EventFilter) : [ string, string ][] {
   // Return the tag filters from the main filter object.
   return Object.entries(filter)
-    .filter(e => e[0].startsWith('#'))
-    .map(e => [ e[0].slice(1, 2), ...e.slice(1) ])
+    .filter(([ tag, [ value ] ]) => tag.startsWith('#') && value)
+    .map(([ tag, [ value ] ]) => [ tag.slice(1, 2), value ])
 }
 
 export function get_event_cache_key (event : SignedEvent) : string | null {

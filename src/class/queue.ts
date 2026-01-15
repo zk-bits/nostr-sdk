@@ -6,8 +6,8 @@ export class MessageQueue {
 
   private readonly _socket : NostrSocket
 
-  private _queue : ClientMessage[]       = []
-  private _timer : NodeJS.Timeout | null = null
+  private _queue : ClientMessage[] = []
+  private _timer : NodeJS.Timeout | undefined
 
   constructor (socket : NostrSocket) {
     // Initialize the socket.
@@ -26,9 +26,7 @@ export class MessageQueue {
     // If the queue has one entry or less,
     if (this.size <= 1) {
       // Clear the timeout if it exists.
-      if (this._timer) clearTimeout(this._timer)
-      // Set the timer to null.
-      this._timer = null
+      clearTimeout(this._timer)
     } else {
       // Get the queue interval.
       const ival = this._socket.config.queue_ival
@@ -54,9 +52,7 @@ export class MessageQueue {
     // Clear the queue.
     this._queue = []
     // Clear the timeout if it exists.
-    if (this._timer) clearTimeout(this._timer)
-    // Set the timer to null.
-    this._timer = null
+    clearTimeout(this._timer)
   }
 
   public push (msg : ClientMessage) : void {
