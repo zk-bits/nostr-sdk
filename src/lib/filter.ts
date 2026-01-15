@@ -57,13 +57,13 @@ export function match_filter (
   // Initialize the matches flag.
   let matches = false
   // Check if the event ID filter is defined, and the ID matches the filter.
-  if (ids && ids.includes(event.id)) {
+  if (ids?.includes(event.id)) {
     matches = true
   // Check if the author filter is defined, and the author matches the filter.
-  } else if (authors && authors.includes(event.pubkey)) {
+  } else if (authors?.includes(event.pubkey)) {
     matches = true
   // Check if the kind filter is defined, and the kind matches the filter.
-  } else if (kinds && kinds.includes(event.kind)) {
+  } else if (kinds?.includes(event.kind)) {
     matches = true
   // Check if any tag filters are defined, and the tags match the filters.
   } else if (match_tags(tag_filters, event.tags)) {
