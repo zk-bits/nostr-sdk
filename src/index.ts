@@ -1,7 +1,7 @@
 export { NostrClient } from './class/client.js'
-export { NostrNode }   from './class/node.js'
 export { NostrRelay }  from './class/relay.js'
 export { NostrSocket } from './class/socket.js'
+// NostrNode is not exported as it's still in development
 
 export * as CONST  from './const.js'
 export * as CRYPTO from './crypto/index.js'

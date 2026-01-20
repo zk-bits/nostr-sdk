@@ -13,7 +13,7 @@ Software development kit for the nostr protocol.
 **`NostrSocket` Class**
 
 * Used to connect and subscribe to a single nostr relay.
-* Promise-wrapped methods for `publish`, `subscribe`, and `query` actions.
+* Methods for `publish`, `subscribe`, and `query` actions.
 * Each connection includes a message queue for rate-limited publishing.
 * Each subscription includes health tracking and a keep-alive mechanism.
 

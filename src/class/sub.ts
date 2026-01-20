@@ -13,6 +13,14 @@ import type {
   SignedEvent
 } from '@/types/index.js'
 
+/**
+ * Subscription to a single Nostr relay.
+ * Handles REQ/CLOSE protocol, automatic resubscription, and event emission.
+ * @emits active  When the subscription receives its first EOSE
+ * @emits closed  When the subscription is closed (with reason)
+ * @emits eose    When an End-Of-Stored-Events message is received
+ * @emits event   When an event matching the filters is received
+ */
 export class NostrSubscription extends EventEmitter <{
   active : [ void ],
   closed : [ string ],
@@ -24,6 +32,8 @@ export class NostrSubscription extends EventEmitter <{
   private readonly _filters : EventFilter[]
   private readonly _id      : string
   private readonly _socket  : NostrSocket
+  /** Bound handler reference for proper cleanup. */
+  private readonly _msgHandler : (msg: RelayMessage) => void
 
   private _active  : boolean = false
   private _count   : number  = 0
@@ -31,6 +41,12 @@ export class NostrSubscription extends EventEmitter <{
   private _since   : number  = now()
   private _timer   : NodeJS.Timeout | undefined
 
+  /**
+   * Creates a new subscription to a relay.
+   * @param filters  Event filter(s) for the subscription
+   * @param socket   The NostrSocket to subscribe through
+   * @param sub_id   Optional subscription ID (auto-generated if not provided)
+   */
   constructor (
     filters : EventFilter | EventFilter[],
     socket  : NostrSocket,
@@ -46,30 +62,38 @@ export class NostrSubscription extends EventEmitter <{
     this._id = sub_id ?? generate_label()
     // Initialize the socket.
     this._socket = socket
+    // Create bound handler reference for cleanup.
+    this._msgHandler = (msg: RelayMessage) => this._handler(msg)
     // Subscribe to the message event.
-    this._socket.on('message', (msg) => this._handler(msg))
+    this._socket.on('message', this._msgHandler)
   }
 
+  /** Subscription configuration inherited from the socket. */
   public get config () {
     return this._config
   }
 
+  /** Event filters for this subscription. */
   public get filters () {
     return this._filters
   }
 
+  /** Unique subscription ID. */
   public get id () {
     return this._id
   }
 
+  /** Whether the subscription is active (has received EOSE). */
   public get is_active () {
     return this._active
   }
 
+  /** The socket this subscription is connected through. */
   public get socket () {
     return this._socket
   }
 
+  /** Current subscription state including event count and retry info. */
   public get state () {
     return {
       active  : this._active,
@@ -100,8 +124,8 @@ export class NostrSubscription extends EventEmitter <{
     this._since   = now()
     // Clear the keep-alive timer.
     clearTimeout(this._timer)
-    // Unsubscribe from the close event.
-    this._socket.off('message', (msg) => this._handler(msg))
+    // Unsubscribe from the socket message event.
+    this._socket.off('message', this._msgHandler)
     // Emit the closed event.
     this.emit('closed', reason)
   }
@@ -152,7 +176,9 @@ export class NostrSubscription extends EventEmitter <{
     // If the keep-alive timer exists, clear it.
     clearTimeout(this._timer)
     // Set a new timer to resubscribe.
-    this._timer = setTimeout(() => this._subscribe(), timeout).unref()
+    this._timer = setTimeout(() => this._subscribe(), timeout)
+    // Prevent timer from blocking process exit in Node.js.
+    if (typeof this._timer.unref === 'function') this._timer.unref()
   }
 
   private _subscribe () {
@@ -160,6 +186,13 @@ export class NostrSubscription extends EventEmitter <{
     this.socket.send([ 'REQ', this.id, ...this.filters ])
   }
 
+  /**
+   * Listens for events on the subscription.
+   * If duration is provided, collects events for that duration.
+   * If duration is undefined, resolves immediately on first event or after msg_timeout.
+   * @param duration  Optional duration in ms to collect events
+   * @returns         Promise that resolves with collected events
+   */
   public listen (duration? : number) : Promise<SignedEvent[]> {
     // Initialize the results array.
     const results : SignedEvent[] = []
@@ -173,7 +206,7 @@ export class NostrSubscription extends EventEmitter <{
       const timer = setTimeout(() => resolve(results), timeout)
       // Subscribe to the event.
       this.within('event', (event : SignedEvent) => {
-        // If a duration is not provided,
+        // If a duration is not provided, resolve on first event.
         if (!duration) {
           // Clear the timeout.
           clearTimeout(timer)
@@ -187,6 +220,11 @@ export class NostrSubscription extends EventEmitter <{
     })
   }
 
+  /**
+   * Activates the subscription and waits for EOSE.
+   * @returns  Promise that resolves with this subscription when active
+   * @throws   Error if subscription times out or is closed by the relay
+   */
   public async subscribe () : Promise<NostrSubscription> {
     // If the subscription is already active, return the subscription.
     if (this.state.active) return this
@@ -195,7 +233,7 @@ export class NostrSubscription extends EventEmitter <{
     // Create a promise to resolve the subscription.
     return new Promise<NostrSubscription>((resolve, reject) => {
       // Set a timeout to reject the promise if the request times out.
-      const timer = setTimeout(() => reject('timeout'), timeout)
+      const timer = setTimeout(() => reject(new Error('subscription timeout')), timeout)
       // Subscribe to the EOSE event.
       this.within('eose', () => {
         // Clear the timeout.
@@ -208,13 +246,14 @@ export class NostrSubscription extends EventEmitter <{
         // Clear the timeout.
         clearTimeout(timer)
         // Reject the promise.
-        reject(reason)
+        reject(new Error(`subscription closed: ${reason}`))
       }, timeout)
       // Send the subscription request.
       this._subscribe()
     })
   }
 
+  /** Closes the subscription and sends CLOSE message to the relay. */
   public unsubscribe () {
     // Close the subscription.
     this._close('unsubscribed')
@@ -223,6 +262,14 @@ export class NostrSubscription extends EventEmitter <{
   }
 }
 
+/**
+ * Manages subscriptions across multiple relays with event deduplication.
+ * Aggregates events from all subscriptions and emits them through a single interface.
+ * @emits active  When at least one subscription is active
+ * @emits closed  When a subscription is closed (with subscription and reason)
+ * @emits eose    When a subscription receives EOSE (with subscription)
+ * @emits event   When a deduplicated event is received
+ */
 export class SubscriptionManager extends EventEmitter <{
   active : [ void ],
   closed : [ NostrSubscription, string? ],
@@ -236,6 +283,12 @@ export class SubscriptionManager extends EventEmitter <{
 
   private _active : boolean = false
 
+  /**
+   * Creates a new subscription manager.
+   * @param subscriptions  Array of NostrSubscription instances to manage
+   * @param cache_size     Size of the deduplication cache (default: 1000)
+   * @throws Error         If subscriptions array is empty
+   */
   constructor (
     subscriptions : NostrSubscription[],
     cache_size    : number = 1000
@@ -258,18 +311,22 @@ export class SubscriptionManager extends EventEmitter <{
     })
   }
 
+  /** Event deduplication cache. */
   public get cache () {
     return this._cache
   }
 
+  /** Configuration inherited from the first subscription. */
   public get config () {
     return this._config
   }
 
+  /** Whether at least one subscription is active. */
   public get is_active () {
     return this._active
   }
 
+  /** Array of managed subscriptions. */
   public get subs () {
     return Array.from(this._subs.values())
   }
@@ -302,6 +359,12 @@ export class SubscriptionManager extends EventEmitter <{
     this.emit('event', event)
   }
 
+  /**
+   * Collects events from all subscriptions for a given duration.
+   * Each subscription listens independently; results are deduplicated.
+   * @param duration  Optional duration in ms to collect events (each sub uses its own timeout)
+   * @returns         Promise that resolves with deduplicated events from all subscriptions
+   */
   public async collect (duration? : number) : Promise<SignedEvent[]> {
     // Create a set of events.
     const events : Set<SignedEvent> = new Set()
@@ -319,17 +382,27 @@ export class SubscriptionManager extends EventEmitter <{
     return Array.from(events)
   }
 
+  /**
+   * Gets a subscription by relay URL.
+   * @param id  The relay URL
+   * @returns   The subscription or undefined if not found
+   */
   public get (id : string) : NostrSubscription | undefined {
     return this._subs.get(id)
   }
 
+  /**
+   * Activates all subscriptions and waits for the first EOSE.
+   * @returns  Promise that resolves with this manager when first subscription is active
+   * @throws   Error if all subscriptions timeout
+   */
   public async subscribe () : Promise<SubscriptionManager> {
     // Define the timeout.
     const timeout = this.config.msg_timeout
     // Create a promise to resolve the subscription manager.
     return new Promise<SubscriptionManager>((resolve, reject) => {
       // Set a timeout to reject the promise if the request times out.
-      const timer = setTimeout(() => reject('timeout'), timeout)
+      const timer = setTimeout(() => reject(new Error('subscription manager timeout')), timeout)
       // For each subscription:
       this.within('eose', () => {
         // Clear the timeout.
@@ -340,6 +413,7 @@ export class SubscriptionManager extends EventEmitter <{
     })
   }
 
+  /** Closes all subscriptions and clears the manager state. */
   public unsubscribe () {
     // Unsubscribe from all subscriptions.
     this.subs.forEach(sub => void sub.unsubscribe())

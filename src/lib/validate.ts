@@ -8,18 +8,33 @@ import type {
   Result
 } from '@/types/index.js'
 
+/**
+ * Validates that a message conforms to the client message schema.
+ * @param message  The message to validate
+ * @throws         Error if the message is invalid
+ */
 export function validate_client_message (
   message : unknown
 ) : asserts message is ClientMessage {
   SCHEMA.MESSAGE.client_message.parse(message)
 }
 
+/**
+ * Validates that a message conforms to the relay message schema.
+ * @param message  The message to validate
+ * @throws         Error if the message is invalid
+ */
 export function validate_relay_message (
   message : unknown
 ) : asserts message is RelayMessage {
   SCHEMA.MESSAGE.relay_message.parse(message)
 }
 
+/**
+ * Parses and validates a client message, returning a Result object.
+ * @param message  The message to parse (string or object)
+ * @returns        Result object with parsed message or error
+ */
 export function parse_client_message (
   message : unknown
 ) : Result<ClientMessage> {
@@ -42,6 +57,11 @@ export function parse_client_message (
     : { ok : false, result : null, error : parse_error(parsed.error) }
 }
 
+/**
+ * Parses and validates a relay message, returning a Result object.
+ * @param message  The message to parse (string or object)
+ * @returns        Result object with parsed message or error
+ */
 export function parse_relay_message (
   message : unknown
 ) : Result<RelayMessage> {

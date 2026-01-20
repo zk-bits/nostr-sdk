@@ -5,9 +5,12 @@
  */
 export class EventEmitter<T extends Record<string, any[]> = {}> {
   private readonly eventMap: Map<keyof T | '*', Set<Function>>
+  /** Maps original handlers to their wrapper functions for once() cleanup. */
+  private readonly wrapperMap: WeakMap<Function, Function>
 
   constructor() {
     this.eventMap = new Map()
+    this.wrapperMap = new WeakMap()
   }
 
   /**
@@ -66,9 +69,12 @@ export class EventEmitter<T extends Record<string, any[]> = {}> {
     handler   : (...args: T[K]) => void | Promise<void>
   ): void {
     const oneTimeHandler = (...args: T[K]): void => {
-      this.off(eventName as string, oneTimeHandler)
+      this.wrapperMap.delete(handler)
+      this.off(eventName, oneTimeHandler)
       void handler(...args)
     }
+    // Store mapping so off() can remove the wrapper using the original handler
+    this.wrapperMap.set(handler, oneTimeHandler)
     this.on(eventName, oneTimeHandler)
   }
 
@@ -88,9 +94,10 @@ export class EventEmitter<T extends Record<string, any[]> = {}> {
       void handler(...args)
     }
 
-    setTimeout(() => {
-      this.off(eventName as string, timeoutHandler)
-    }, timeoutMs).unref()
+    const timer = setTimeout(() => {
+      this.off(eventName, timeoutHandler)
+    }, timeoutMs)
+    if (typeof timer.unref === 'function') timer.unref()
 
     this.on(eventName, timeoutHandler)
   }
@@ -133,9 +140,17 @@ export class EventEmitter<T extends Record<string, any[]> = {}> {
    * @param handler    Handler function to remove
    */
   public off <K extends keyof T> (
-    eventName : string,
+    eventName : K,
     handler   : (...args: T[K]) => void | Promise<void>
   ) : void {
-    this.getEventHandlers(eventName).delete(handler);
+    const handlers = this.getEventHandlers(eventName as string)
+    // Try to remove the handler directly
+    if (handlers.delete(handler)) return
+    // If not found, check if it's a wrapped handler (from once())
+    const wrapper = this.wrapperMap.get(handler)
+    if (wrapper) {
+      handlers.delete(wrapper)
+      this.wrapperMap.delete(handler)
+    }
   }
 }

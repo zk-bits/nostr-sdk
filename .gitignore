@@ -2,7 +2,7 @@
 TODO.md
 NOTES.md
 *.http
-.local
+local/*
 
 # Logs
 logs

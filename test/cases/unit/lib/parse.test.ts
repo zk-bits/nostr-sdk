@@ -1,0 +1,183 @@
+import { Test } from 'tape'
+import { z }    from 'zod'
+
+import { parse_content, parse_event } from '@/lib/parse.js'
+import { create_event, sign_event }   from '@/lib/event.js'
+import { gen_seckey, get_pubkey }     from '@/crypto/ecc.js'
+
+export default function parse_tests (t: Test) {
+  t.test('parse_content', st => {
+    st.test('parses valid JSON', t => {
+      const content = JSON.stringify({ foo: 'bar', num: 42 })
+      const result  = parse_content(content)
+
+      t.ok(result.ok, 'parsing succeeded')
+      t.deepEqual(result.result, { foo: 'bar', num: 42 }, 'correct data')
+      t.end()
+    })
+
+    st.test('returns error for invalid JSON', t => {
+      const content = 'not valid json'
+      const result  = parse_content(content)
+
+      t.notOk(result.ok, 'parsing failed')
+      t.equal(result.result, null, 'result is null')
+      t.ok(typeof result.error === 'string', 'has error message')
+      t.end()
+    })
+
+    st.test('validates with schema when provided', t => {
+      const schema  = z.object({ name: z.string(), age: z.number() })
+      const content = JSON.stringify({ name: 'Alice', age: 30 })
+      const result  = parse_content(content, schema)
+
+      t.ok(result.ok, 'schema validation passed')
+      t.deepEqual(result.result, { name: 'Alice', age: 30 }, 'correct data')
+      t.end()
+    })
+
+    st.test('returns error when schema validation fails', t => {
+      const schema  = z.object({ name: z.string(), age: z.number() })
+      const content = JSON.stringify({ name: 'Alice', age: 'thirty' })
+      const result  = parse_content(content, schema)
+
+      t.notOk(result.ok, 'schema validation failed')
+      t.equal(result.result, null, 'result is null')
+      t.end()
+    })
+
+    st.test('handles empty object', t => {
+      const content = JSON.stringify({})
+      const result  = parse_content(content)
+
+      t.ok(result.ok, 'parsing succeeded')
+      t.deepEqual(result.result, {}, 'correct empty object')
+      t.end()
+    })
+
+    st.test('handles array content', t => {
+      const content = JSON.stringify([1, 2, 3])
+      const result  = parse_content(content)
+
+      t.ok(result.ok, 'parsing succeeded')
+      t.deepEqual(result.result, [1, 2, 3], 'correct array')
+      t.end()
+    })
+
+    st.test('handles primitive values', t => {
+      t.deepEqual(parse_content('"hello"').result, 'hello', 'string')
+      t.deepEqual(parse_content('42').result, 42, 'number')
+      t.deepEqual(parse_content('true').result, true, 'boolean')
+      t.deepEqual(parse_content('null').result, null, 'null')
+      t.end()
+    })
+
+    st.end()
+  })
+
+  t.test('parse_event', st => {
+    st.test('parses event content as JSON', t => {
+      const seckey = gen_seckey()
+      const pubkey = get_pubkey(seckey)
+      const event  = sign_event(
+        create_event({
+          content : JSON.stringify({ message: 'hello' }),
+          kind    : 1,
+          pubkey
+        }),
+        seckey
+      )
+
+      const result = parse_event(event)
+
+      t.ok(result.ok, 'parsing succeeded')
+      t.deepEqual(result.result?.data, { message: 'hello' }, 'correct data')
+      t.equal(result.result?.id, event.id, 'preserves event id')
+      t.end()
+    })
+
+    st.test('returns error for invalid JSON content', t => {
+      const seckey = gen_seckey()
+      const pubkey = get_pubkey(seckey)
+      const event  = sign_event(
+        create_event({
+          content : 'not json',
+          kind    : 1,
+          pubkey
+        }),
+        seckey
+      )
+
+      const result = parse_event(event)
+
+      t.notOk(result.ok, 'parsing failed')
+      t.equal(result.result, null, 'result is null')
+      t.end()
+    })
+
+    st.test('validates with schema when provided', t => {
+      const seckey = gen_seckey()
+      const pubkey = get_pubkey(seckey)
+      const schema = z.object({ type: z.string() })
+      const event  = sign_event(
+        create_event({
+          content : JSON.stringify({ type: 'note' }),
+          kind    : 1,
+          pubkey
+        }),
+        seckey
+      )
+
+      const result = parse_event(event, schema)
+
+      t.ok(result.ok, 'schema validation passed')
+      t.deepEqual(result.result?.data, { type: 'note' }, 'correct data')
+      t.end()
+    })
+
+    st.test('returns error when schema validation fails', t => {
+      const seckey = gen_seckey()
+      const pubkey = get_pubkey(seckey)
+      const schema = z.object({ type: z.number() })
+      const event  = sign_event(
+        create_event({
+          content : JSON.stringify({ type: 'note' }),
+          kind    : 1,
+          pubkey
+        }),
+        seckey
+      )
+
+      const result = parse_event(event, schema)
+
+      t.notOk(result.ok, 'schema validation failed')
+      t.end()
+    })
+
+    st.test('preserves all event fields', t => {
+      const seckey = gen_seckey()
+      const pubkey = get_pubkey(seckey)
+      const event  = sign_event(
+        create_event({
+          content    : JSON.stringify({ x: 1 }),
+          kind       : 1,
+          pubkey,
+          tags       : [['t', 'test']],
+          created_at : 12345
+        }),
+        seckey
+      )
+
+      const result = parse_event(event)
+
+      t.ok(result.ok, 'parsing succeeded')
+      t.equal(result.result?.kind, 1, 'preserves kind')
+      t.equal(result.result?.pubkey, pubkey, 'preserves pubkey')
+      t.equal(result.result?.created_at, 12345, 'preserves created_at')
+      t.deepEqual(result.result?.tags, [['t', 'test']], 'preserves tags')
+      t.end()
+    })
+
+    st.end()
+  })
+}

@@ -46,7 +46,7 @@ export async function parse_query <T = unknown> (
     // If the promise failed, throw the reason.
     if (!res.ok) throw res.reason
     // If the promise resolved with no events, throw an error.
-    if (res.events.length === 0) throw 'no events found'
+    if (res.events.length === 0) throw new Error('no events found')
     // Define the array of parsed events.
     const events : ParsedEvent<T>[] = []
     // Iterate over the events.
@@ -59,7 +59,7 @@ export async function parse_query <T = unknown> (
       events.push(parsed.result)
     }
     // If no events are valid, throw an error.
-    if (events.length === 0) throw 'all events failed validation'
+    if (events.length === 0) throw new Error('all events failed validation')
     // Return the events.
     return events
   })
