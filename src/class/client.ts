@@ -16,7 +16,11 @@ import type {
   PublishResponse,
   NostrClientConfig
 } from '@/types/index.js'
-import { generate_label } from '@/lib/util.js'
+
+import {
+  generate_label,
+  promise_any_with_context
+} from '@/lib/util.js'
 
 /** Default configuration for NostrClient instances. */
 export const CLIENT_CONFIG : NostrClientConfig = {
@@ -101,7 +105,11 @@ export class NostrClient extends EventEmitter <{
    */
   public async connect () : Promise<void> {
     // Return a promise that resolves when the first socket connects.
-    return Promise.any(this.sockets.map(socket => socket.connect()))
+    return promise_any_with_context(
+      this.sockets.map(socket => socket.connect()),
+      'Connect',
+      this.sockets
+    )
   }
 
   /**
@@ -113,7 +121,7 @@ export class NostrClient extends EventEmitter <{
     // Create a set of receipts.
     const receipts = this.sockets.map(socket => socket.publish(event))
     // Return a promise that resolves when the first receipt is received.
-    return Promise.any(receipts)
+    return promise_any_with_context(receipts, 'Publish', this.sockets)
   }
 
   /**
@@ -129,7 +137,7 @@ export class NostrClient extends EventEmitter <{
     // Create a set of queries.
     const queries = this.sockets.map(socket => socket.query(filters, duration))
     // Return a promise that resolves when the first query is completed.
-    return Promise.any(queries)
+    return promise_any_with_context(queries, 'Query', this.sockets)
   }
 
   /**

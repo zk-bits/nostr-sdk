@@ -192,7 +192,7 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
     // Create a promise to resolve the connection.
     return new Promise((resolve, reject) => {
       // Set a timeout to reject the promise if the connection times out.
-      const timer = setTimeout(() => reject(new Error('connection timeout')), timeout)
+      const timer = setTimeout(() => reject(new Error(`connection timeout for ${this.url}`)), timeout)
       // Connect the socket.
       this.within('ready', () => {
         // Clear the timeout.
@@ -219,7 +219,7 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
     // Create a promise to resolve the publish result.
     return new Promise((resolve, reject) => {
       // Set a timeout to reject the promise if the request times out.
-      const timer = setTimeout(() => reject(new Error('publish timeout')), timeout)
+      const timer = setTimeout(() => reject(new Error(`publish timeout for ${this.url}`)), timeout)
       // Subscribe to the receipt event.
       this.within('receipt', (msg : RelayReceiptMessage) => {
         // Unpack the receipt message.

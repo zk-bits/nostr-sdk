@@ -11,6 +11,11 @@ import type {
 import type { SignedEvent }       from './event.js'
 import type { NostrSocketConfig } from './socket.js'
 
+export interface RelayFailure {
+  relay  : string
+  reason : string
+}
+
 export interface NostrClientConfig extends NostrSocketConfig {
   cache_size : number
 }

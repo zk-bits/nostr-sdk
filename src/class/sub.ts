@@ -233,7 +233,7 @@ export class NostrSubscription extends EventEmitter <{
     // Create a promise to resolve the subscription.
     return new Promise<NostrSubscription>((resolve, reject) => {
       // Set a timeout to reject the promise if the request times out.
-      const timer = setTimeout(() => reject(new Error('subscription timeout')), timeout)
+      const timer = setTimeout(() => reject(new Error(`subscription timeout for ${this.socket.url}`)), timeout)
       // Subscribe to the EOSE event.
       this.within('eose', () => {
         // Clear the timeout.
@@ -246,7 +246,7 @@ export class NostrSubscription extends EventEmitter <{
         // Clear the timeout.
         clearTimeout(timer)
         // Reject the promise.
-        reject(new Error(`subscription closed: ${reason}`))
+        reject(new Error(`subscription closed by ${this.socket.url}: ${reason}`))
       }, timeout)
       // Send the subscription request.
       this._subscribe()
@@ -402,7 +402,7 @@ export class SubscriptionManager extends EventEmitter <{
     // Create a promise to resolve the subscription manager.
     return new Promise<SubscriptionManager>((resolve, reject) => {
       // Set a timeout to reject the promise if the request times out.
-      const timer = setTimeout(() => reject(new Error('subscription manager timeout')), timeout)
+      const timer = setTimeout(() => reject(new Error('subscription timeout: no relay responded')), timeout)
       // For each subscription:
       this.within('eose', () => {
         // Clear the timeout.

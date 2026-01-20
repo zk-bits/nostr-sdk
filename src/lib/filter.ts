@@ -60,7 +60,7 @@ export function match_any_filter (
 
 /**
  * Checks if an event matches a single filter.
- * Matches on id, author, kind, or tag filters, then validates time constraints.
+ * All defined filter conditions must match (AND logic per NIP-01).
  * @param event   The event to check
  * @param filter  The filter to match against
  * @returns       True if the event matches the filter
@@ -73,53 +73,71 @@ export function match_filter (
   const { authors, ids, kinds, since, until, limit, ...rest } = filter
   // Get the tag filters from the rest of the filter object.
   const tag_filters = get_tag_filters(rest)
-  // Initialize the matches flag.
-  let matches = false
-  // Check if the event ID filter is defined, and the ID matches the filter.
-  if (ids?.includes(event.id)) {
-    matches = true
-  // Check if the author filter is defined, and the author matches the filter.
-  } else if (authors?.includes(event.pubkey)) {
-    matches = true
-  // Check if the kind filter is defined, and the kind matches the filter.
-  } else if (kinds?.includes(event.kind)) {
-    matches = true
-  // Check if any tag filters are defined, and the tags match the filters.
-  } else if (match_tags(tag_filters, event.tags)) {
-    matches = true
-  }
-  // Check if the "created at" timestamp is outside the since and until filters.
-  if ((since && event.created_at < since) || (until && event.created_at > until)) {
-    matches = false
-  }
-  // Return the matches flag.
-  return matches
+
+  // Check if any positive match criteria exist.
+  const has_criteria = (
+    (ids !== undefined && ids.length > 0) ||
+    (authors !== undefined && authors.length > 0) ||
+    (kinds !== undefined && kinds.length > 0) ||
+    tag_filters.length > 0
+  )
+
+  // If no criteria, no match (empty filter matches nothing).
+  if (!has_criteria) return false
+
+  // Check each defined filter condition - ALL must pass (AND logic).
+  if (ids && ids.length > 0 && !ids.includes(event.id)) return false
+  if (authors && authors.length > 0 && !authors.includes(event.pubkey)) return false
+  if (kinds && kinds.length > 0 && !kinds.includes(event.kind)) return false
+  if (tag_filters.length > 0 && !match_tags(tag_filters, event.tags)) return false
+
+  // Check time constraints.
+  if (since && event.created_at < since) return false
+  if (until && event.created_at > until) return false
+
+  return true
 }
 
 /**
- * Checks if event tags match any of the tag filters.
+ * Checks if event tags match all of the tag filters.
+ * Uses AND logic across different tag types, OR logic within same tag type.
  * @param filters  Array of [tag_name, value] tuples to match
  * @param tags     Event tags array (each tag is [name, ...values])
- * @returns        True if any tag matches a filter
+ * @returns        True if all tag filter conditions are satisfied
  */
 export function match_tags (
   filters : [ string, string ][],
   tags    : string[][]
 ) : boolean {
-  // For each filter entry:
+  // If no filters, return true (nothing to match).
+  if (filters.length === 0) return true
+
+  // Group filters by tag name for AND/OR logic.
+  const filter_groups = new Map<string, string[]>()
   for (const [ key, value ] of filters) {
-    // For each tag entry:
-    for (const [ tag, ...params ] of tags) {
-      // If the tag matches the filter,
-      // and params include the filter value:
-      if (key === tag && params.includes(value)) {
-        // Return true.
-        return true
-      }
+    const values = filter_groups.get(key)
+    if (values) {
+      values.push(value)
+    } else {
+      filter_groups.set(key, [ value ])
     }
   }
-  // If no tag matches, return false.
-  return false
+
+  // Each tag type group must have at least one matching value (AND across groups).
+  for (const [ key, values ] of filter_groups) {
+    // Check if any of the filter values match any event tag (OR within group).
+    let group_matched = false
+    for (const [ tag, ...params ] of tags) {
+      if (key === tag && values.some(v => params.includes(v))) {
+        group_matched = true
+        break
+      }
+    }
+    // If this tag type group didn't match, the whole filter fails.
+    if (!group_matched) return false
+  }
+
+  return true
 }
 
 /**
@@ -134,9 +152,11 @@ export function get_tag_filters (filter : EventFilter) : [ string, string ][] {
   return Object.entries(filter)
     .filter(([ tag, values ]) => {
       // Must be a tag filter (starts with #) with a non-empty array
-      return tag.startsWith('#') && Array.isArray(values) && values.length > 0 && values[0]
+      return tag.startsWith('#') && Array.isArray(values) && values.length > 0
     })
-    .map(([ tag, values ]) => [ tag.slice(1, 2), values[0] as string ])
+    .flatMap(([ tag, values ]) =>
+      (values as string[]).map(value => [ tag.slice(1), value ] as [ string, string ])
+    )
 }
 
 /**
