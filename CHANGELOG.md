@@ -4,6 +4,7 @@
 
 - Fixed issues with event filtering and matching.
 - Added more test cases.
+- Added `test/config.ts` file for configuration.
 - Made error responses more useful.
 - Added documentation.
 

@@ -1,6 +1,7 @@
 import { Test }        from 'tape'
 import { NostrRelay }  from '@/class/relay.js'
 import { NostrClient } from '@/class/client.js'
+import { TEST_PORTS, TEST_URLS } from '#/config.js'
 
 import { gen_seckey, get_pubkey }   from '@/crypto/ecc.js'
 import { create_event, sign_event } from '@/lib/event.js'
@@ -10,8 +11,8 @@ export default async function client_tests (t: Test) {
   const relay1 = new NostrRelay()
   const relay2 = new NostrRelay()
 
-  await relay1.start({ port: 8085 })
-  await relay2.start({ port: 8086 })
+  await relay1.start({ port: TEST_PORTS.CLIENT_RELAY_1 })
+  await relay2.start({ port: TEST_PORTS.CLIENT_RELAY_2 })
 
   t.test('NostrClient construction', async st => {
     st.test('requires at least one relay', t => {
@@ -25,8 +26,8 @@ export default async function client_tests (t: Test) {
 
     st.test('creates socket for each relay', t => {
       const client = new NostrClient([
-        'ws://localhost:8085',
-        'ws://localhost:8086'
+        TEST_URLS.CLIENT_RELAY_1,
+        TEST_URLS.CLIENT_RELAY_2
       ])
 
       t.equal(client.sockets.length, 2, 'two sockets created')
@@ -40,8 +41,8 @@ export default async function client_tests (t: Test) {
   t.test('NostrClient connection', async st => {
     st.test('connects to relays', async t => {
       const client = new NostrClient([
-        'ws://localhost:8085',
-        'ws://localhost:8086'
+        TEST_URLS.CLIENT_RELAY_1,
+        TEST_URLS.CLIENT_RELAY_2
       ])
 
       await client.connect()
@@ -54,8 +55,8 @@ export default async function client_tests (t: Test) {
 
     st.test('close disconnects all sockets', async t => {
       const client = new NostrClient([
-        'ws://localhost:8085',
-        'ws://localhost:8086'
+        TEST_URLS.CLIENT_RELAY_1,
+        TEST_URLS.CLIENT_RELAY_2
       ])
 
       await client.connect()
@@ -72,8 +73,8 @@ export default async function client_tests (t: Test) {
   t.test('NostrClient publish', async st => {
     st.test('publishes event to relays', async t => {
       const client = new NostrClient([
-        'ws://localhost:8085',
-        'ws://localhost:8086'
+        TEST_URLS.CLIENT_RELAY_1,
+        TEST_URLS.CLIENT_RELAY_2
       ])
 
       await client.connect()
@@ -98,7 +99,7 @@ export default async function client_tests (t: Test) {
 
   t.test('NostrClient query', async st => {
     st.test('queries events from relays', async t => {
-      const client = new NostrClient(['ws://localhost:8085'])
+      const client = new NostrClient([TEST_URLS.CLIENT_RELAY_1])
 
       await client.connect()
 

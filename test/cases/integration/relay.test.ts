@@ -1,6 +1,7 @@
 import { Test }        from 'tape'
 import { NostrRelay }  from '@/class/relay.js'
 import { NostrSocket } from '@/class/socket.js'
+import { TEST_PORTS, TEST_URLS } from '#/config.js'
 
 import { gen_seckey, get_pubkey }   from '@/crypto/ecc.js'
 import { create_event, sign_event, verify_event } from '@/lib/event.js'
@@ -11,7 +12,7 @@ export default async function relay_tests (t: Test) {
     st.test('starts and stops cleanly', async t => {
       const relay = new NostrRelay()
 
-      await relay.start({ port: 8081 })
+      await relay.start({ port: TEST_PORTS.RELAY_LIFECYCLE_1 })
       t.ok(relay.ready, 'relay is ready after start')
 
       relay.stop()
@@ -26,7 +27,7 @@ export default async function relay_tests (t: Test) {
       let emitted = false
 
       relay.on('ready', () => { emitted = true })
-      await relay.start({ port: 8082 })
+      await relay.start({ port: TEST_PORTS.RELAY_LIFECYCLE_2 })
 
       t.ok(emitted, 'ready event emitted')
       relay.stop()
@@ -38,10 +39,10 @@ export default async function relay_tests (t: Test) {
 
   t.test('NostrRelay client handling', async st => {
     const relay = new NostrRelay()
-    await relay.start({ port: 8083 })
+    await relay.start({ port: TEST_PORTS.RELAY_CLIENT })
 
     st.test('accepts client connections', async t => {
-      const socket = new NostrSocket('ws://localhost:8083')
+      const socket = new NostrSocket(TEST_URLS.RELAY_CLIENT)
       await socket.connect()
 
       t.ok(socket.is_ready, 'socket connected to relay')
@@ -53,7 +54,7 @@ export default async function relay_tests (t: Test) {
     })
 
     st.test('handles EVENT message', async t => {
-      const socket = new NostrSocket('ws://localhost:8083')
+      const socket = new NostrSocket(TEST_URLS.RELAY_CLIENT)
       await socket.connect()
 
       const event   = createTestEvent()
@@ -68,7 +69,7 @@ export default async function relay_tests (t: Test) {
     })
 
     st.test('handles REQ message with filters', async t => {
-      const socket = new NostrSocket('ws://localhost:8083')
+      const socket = new NostrSocket(TEST_URLS.RELAY_CLIENT)
       await socket.connect()
 
       const seckey = gen_seckey()
@@ -88,7 +89,7 @@ export default async function relay_tests (t: Test) {
     })
 
     st.test('handles CLOSE message', async t => {
-      const socket = new NostrSocket('ws://localhost:8083')
+      const socket = new NostrSocket(TEST_URLS.RELAY_CLIENT)
       await socket.connect()
 
       const sub = await socket.subscribe({ kinds: [1] })
@@ -104,7 +105,7 @@ export default async function relay_tests (t: Test) {
     })
 
     st.test('rejects invalid events', async t => {
-      const socket = new NostrSocket('ws://localhost:8083')
+      const socket = new NostrSocket(TEST_URLS.RELAY_CLIENT)
       await socket.connect()
 
       const event  = createTestEvent()
@@ -123,8 +124,8 @@ export default async function relay_tests (t: Test) {
     })
 
     st.test('broadcasts events to subscribers', async t => {
-      const socket1 = new NostrSocket('ws://localhost:8083')
-      const socket2 = new NostrSocket('ws://localhost:8083')
+      const socket1 = new NostrSocket(TEST_URLS.RELAY_CLIENT)
+      const socket2 = new NostrSocket(TEST_URLS.RELAY_CLIENT)
 
       await socket1.connect()
       await socket2.connect()

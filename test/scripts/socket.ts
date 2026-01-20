@@ -1,4 +1,5 @@
 import { NostrSocket } from '@/class/socket.js'
+import { TEST_URLS }   from '#/config.js'
 
 import { gen_seckey, get_pubkey }   from '@/crypto/ecc.js'
 import { create_event, sign_event } from '@/lib/event.js'
@@ -19,7 +20,7 @@ const template = create_event({
 
 const event = sign_event(template, seckey)
 
-const socket = new NostrSocket('ws://localhost:8080')
+const socket = new NostrSocket(TEST_URLS.SOCKET_RELAY)
 
 // socket.all(console.log)
 

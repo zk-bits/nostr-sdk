@@ -1,13 +1,14 @@
 
 import { Test }        from 'tape'
 import { NostrSocket } from '@/class/socket.js'
+import { TEST_URLS }   from '#/config.js'
 
 import { gen_seckey, get_pubkey }   from '@/crypto/ecc.js'
 import { create_event, sign_event } from '@/lib/event.js'
 
 export default async function (t : Test) {
   // Create a new socket.
-  const socket = new NostrSocket('ws://localhost:8080')
+  const socket = new NostrSocket(TEST_URLS.SOCKET_RELAY)
   // Try to run the test case.
   try { await socket_test(t, socket) } 
   // If an error occurs,

@@ -2,17 +2,18 @@ import { Test }        from 'tape'
 import { NostrRelay }  from '@/class/relay.js'
 import { NostrSocket } from '@/class/socket.js'
 import { NostrSubscription, SubscriptionManager } from '@/class/sub.js'
+import { TEST_PORTS, TEST_URLS } from '#/config.js'
 
 import { gen_seckey, get_pubkey }   from '@/crypto/ecc.js'
 import { create_event, sign_event } from '@/lib/event.js'
 
 export default async function subscription_tests (t: Test) {
   const relay = new NostrRelay()
-  await relay.start({ port: 8084 })
+  await relay.start({ port: TEST_PORTS.SUBSCRIPTION })
 
   t.test('NostrSubscription lifecycle', async st => {
     st.test('creates subscription with filters', async t => {
-      const socket = new NostrSocket('ws://localhost:8084')
+      const socket = new NostrSocket(TEST_URLS.SUBSCRIPTION)
       await socket.connect()
 
       const sub = new NostrSubscription({ kinds: [1] }, socket)
@@ -26,7 +27,7 @@ export default async function subscription_tests (t: Test) {
     })
 
     st.test('activates on subscribe', async t => {
-      const socket = new NostrSocket('ws://localhost:8084')
+      const socket = new NostrSocket(TEST_URLS.SUBSCRIPTION)
       await socket.connect()
 
       const sub = await socket.subscribe({ kinds: [1] })
@@ -40,7 +41,7 @@ export default async function subscription_tests (t: Test) {
     })
 
     st.test('emits eose event', async t => {
-      const socket = new NostrSocket('ws://localhost:8084')
+      const socket = new NostrSocket(TEST_URLS.SUBSCRIPTION)
       await socket.connect()
 
       const sub     = new NostrSubscription({ kinds: [1] }, socket)
@@ -57,7 +58,7 @@ export default async function subscription_tests (t: Test) {
     })
 
     st.test('emits event when receiving events', async t => {
-      const socket = new NostrSocket('ws://localhost:8084')
+      const socket = new NostrSocket(TEST_URLS.SUBSCRIPTION)
       await socket.connect()
 
       const seckey = gen_seckey()
@@ -81,7 +82,7 @@ export default async function subscription_tests (t: Test) {
     })
 
     st.test('listen collects events for duration', async t => {
-      const socket = new NostrSocket('ws://localhost:8084')
+      const socket = new NostrSocket(TEST_URLS.SUBSCRIPTION)
       await socket.connect()
 
       const seckey = gen_seckey()
@@ -107,7 +108,7 @@ export default async function subscription_tests (t: Test) {
     })
 
     st.test('unsubscribe stops receiving events', async t => {
-      const socket = new NostrSocket('ws://localhost:8084')
+      const socket = new NostrSocket(TEST_URLS.SUBSCRIPTION)
       await socket.connect()
 
       const seckey = gen_seckey()
