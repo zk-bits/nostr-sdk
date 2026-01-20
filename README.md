@@ -1,140 +1,308 @@
-# nostr-sdk
+# @vbyte/nostr-sdk
 
-Software development kit for the nostr protocol.
+[![npm version](https://img.shields.io/npm/v/@vbyte/nostr-sdk)](https://npmjs.com/package/@vbyte/nostr-sdk)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> Note: This project is under heavy development. The codebase and documentation are incomplete.
+A TypeScript SDK for the Nostr protocol.
 
-## Overview
+## Features
 
-*wip*
+- **Single relay connections** - `NostrSocket` for connecting to individual relays
+- **Multi-relay aggregation** - `NostrClient` for managing multiple relay connections
+- **NIP-04 and NIP-44 encryption** - End-to-end encrypted direct messages
+- **Schnorr signatures** - secp256k1 cryptographic signing
+- **Rate-limited message queuing** - Configurable batch publishing
+- **Event deduplication** - O(1) cache for filtering duplicate events
+- **TypeScript-first** - Full type definitions included
+- **Zod schema validation** - Runtime validation for events and messages
 
-*overview of the SDK*
+## Installation
 
-**`NostrSocket` Class**
+```bash
+npm install @vbyte/nostr-sdk
+```
 
-* Used to connect and subscribe to a single nostr relay.
-* Methods for `publish`, `subscribe`, and `query` actions.
-* Each connection includes a message queue for rate-limited publishing.
-* Each subscription includes health tracking and a keep-alive mechanism.
+```bash
+pnpm add @vbyte/nostr-sdk
+```
 
-**`NostrClient` Class**
+**Note:** The `ws` package is a peer dependency for Node.js environments.
 
-* Used to connect and subscribe to multiple relays (via `NostrSocket`).
-* Promise-wrapped methods for `publish`, `subscribe`, and `query` actions.
-* Aggregates and labels events from all relays into a single event bus.
-* Includes O(1) event ID cache for de-duplication of incoming events.
-
-**`NostrNode` Class**
-
-* A reference node for building custom peer-to-peer protocols over relays.
-* Communicate with other nodes via end-to-end encrypted RPC messaging.
-* Promise-wrapped one-to-one coummunication with `send` and `request`.
-* Promise-wrapped one-to-many coummunication with `cast` and `collect`.
-* Automated health tracking for peers through `echo` and `ping` methods.
-
-## How to Use
-
-*wip*
-
-*overview of how the package can be used*
-
-### Installation
-
-*wip*
-
-*instructions on how to install the package*
+## Quick Start
 
 ### Connect to a Single Relay
 
-*wip*
+```typescript
+import { NostrSocket, CRYPTO, LIB } from '@vbyte/nostr-sdk'
 
-*instructions on how to use the `NostrSocket` class*
+// Create socket and connect
+const socket = new NostrSocket('wss://relay.example.com')
+await socket.connect()
 
-### Connect to Multiple Relays
+// Generate keys
+const seckey = CRYPTO.gen_seckey()
+const pubkey = CRYPTO.get_pubkey(seckey)
 
-*wip*
+// Create and sign an event
+const template = LIB.create_event({
+  kind: 1,
+  content: 'Hello Nostr!',
+  pubkey
+})
+const event = LIB.sign_event(template, seckey)
 
-*instructions on how to use the `NostrClient` class*
+// Publish the event
+await socket.publish(event)
 
-### Connect to Other Peers (P2P)
+// Close connection
+socket.close()
+```
 
-*wip*
+### Subscribe to Events
 
-*instructions on how to use the `NostrNode` class*
+```typescript
+const sub = await socket.subscribe({ kinds: [1], limit: 10 })
 
-### Helper Methods
+sub.on('event', (msg) => {
+  const [, subId, event] = msg
+  console.log(event)
+})
+```
 
-*wip*
+### Query Events
 
-This section will cover helper methods that are useful for development.
+```typescript
+const events = await socket.query({ kinds: [1], limit: 10 })
+console.log(events)
+```
+
+### Multi-Relay Client
+
+```typescript
+import { NostrClient } from '@vbyte/nostr-sdk'
+
+const client = new NostrClient([
+  'wss://relay1.example.com',
+  'wss://relay2.example.com'
+])
+await client.connect()
+
+// Publish to all relays (resolves on first success)
+await client.publish(event)
+
+// Subscribe with automatic deduplication
+const sub = await client.subscribe({ kinds: [1] })
+sub.on('event', (subId, event) => console.log(event))
+
+// Close all connections
+client.close()
+```
+
+## API Reference
+
+### NostrSocket
+
+Single WebSocket connection to a Nostr relay.
+
+**Constructor**
+
+```typescript
+new NostrSocket(url: string, options?: Partial<NostrSocketConfig>)
+```
+
+**Options**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `max_retries` | `number` | `3` | Max reconnection attempts |
+| `queue_ival` | `number` | `500` | Queue processing interval (ms) |
+| `queue_limit` | `number` | `10` | Messages per queue batch |
+| `msg_timeout` | `number` | `5000` | Message response timeout (ms) |
+| `sub_timeout` | `number` | `30000` | Subscription EOSE timeout (ms) |
+
+**Methods**
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `connect()` | `Promise<void>` | Establish connection |
+| `publish(event)` | `Promise<PublishResponse>` | Publish signed event |
+| `subscribe(filters)` | `Promise<NostrSubscription>` | Create persistent subscription |
+| `query(filters, duration?)` | `Promise<SignedEvent[]>` | One-shot event query |
+| `close(delay?)` | `void` | Close connection |
+| `send(msg)` | `void` | Send message via queue |
+
+**Events**
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `ready` | `NostrSocket` | Connection established |
+| `closed` | `NostrSocket` | Connection closed |
+| `error` | `[unknown, unknown]` | Error occurred |
+| `message` | `RelayMessage` | Relay message received |
+| `notice` | `string` | NOTICE message from relay |
+| `receipt` | `RelayReceiptMessage` | OK receipt for published event |
+
+### NostrClient
+
+Multi-relay client with event deduplication.
+
+**Constructor**
+
+```typescript
+new NostrClient(relays: string[], options?: Partial<NostrClientConfig>)
+```
+
+**Additional Options**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `cache_size` | `number` | `500` | Event deduplication cache size |
+
+**Methods**
+
+Same as `NostrSocket`, but operations are distributed across all relays:
+- `connect()` - Resolves when first relay connects
+- `publish(event)` - Resolves on first successful publish
+- `query(filters, duration?)` - Resolves with first relay's response
+- `subscribe(filter)` - Returns `SubscriptionManager` with deduplication
+- `close()` - Closes all connections
+
+## Crypto Module
+
+```typescript
+import { CRYPTO } from '@vbyte/nostr-sdk'
+// or
+import * as CRYPTO from '@vbyte/nostr-sdk/crypto'
+```
+
+### Key Management
+
+| Function | Description |
+|----------|-------------|
+| `gen_seckey(seed?)` | Generate secret key (optionally from seed) |
+| `get_pubkey(seckey)` | Derive public key from secret key |
+| `get_shared_secret(seckey, pubkey)` | Compute ECDH shared secret |
+
+### Signatures
+
+| Function | Description |
+|----------|-------------|
+| `create_signature(seckey, message)` | Create Schnorr signature |
+| `verify_signature(message, pubkey, sig)` | Verify Schnorr signature |
+
+### Encryption
+
+| Function | Description |
+|----------|-------------|
+| `nip04_encrypt(secret, content, iv?)` | NIP-04 AES-CBC encryption |
+| `nip04_decrypt(secret, content)` | NIP-04 AES-CBC decryption |
+| `nip44_encrypt(secret, content, nonce?)` | NIP-44 ChaCha20 encryption |
+| `nip44_decrypt(secret, payload)` | NIP-44 ChaCha20 decryption |
+
+### Encoding
+
+| Function | Description |
+|----------|-------------|
+| `encode_b64url(data)` | Encode bytes to base64url |
+| `decode_b64url(str)` | Decode base64url to bytes |
+
+## Library Module
+
+```typescript
+import { LIB } from '@vbyte/nostr-sdk'
+// or
+import * as LIB from '@vbyte/nostr-sdk/lib'
+```
+
+### Event Handling
+
+| Function | Description |
+|----------|-------------|
+| `create_event(config)` | Create event template |
+| `sign_event(template, seckey)` | Sign event with secret key |
+| `verify_event(event)` | Verify event signature (returns error string or null) |
+| `get_event_id(template)` | Compute event ID hash |
+| `get_event_tag(event, tag)` | Get first tag by name |
+| `filter_event_tags(event, tag)` | Get all tags by name |
+| `is_event_recipient(event, pubkey)` | Check if pubkey is in 'p' tags |
+| `is_event_expired(event, current?)` | Check if event has expired |
+
+### Filtering
+
+| Function | Description |
+|----------|-------------|
+| `match_filter(event, filter)` | Check if event matches filter |
+| `match_any_filter(event, filters)` | Check if event matches any filter |
+| `process_filters(events, filters)` | Filter event array |
+| `is_kind_regular(kind)` | Check if kind is regular (1, 2, 4-44, 1000-9999) |
+| `is_kind_replace(kind)` | Check if kind is replaceable (0, 3, 10000-19999) |
+| `is_kind_ephemeral(kind)` | Check if kind is ephemeral (20000-29999) |
+| `is_kind_address(kind)` | Check if kind is addressable (30000-39999) |
+
+## Types
+
+```typescript
+import type {
+  // Events
+  SignedEvent,
+  EventTemplate,
+  EventFilter,
+  EventConfig,
+
+  // Configuration
+  NostrSocketConfig,
+  NostrClientConfig,
+
+  // Responses
+  PublishResponse
+} from '@vbyte/nostr-sdk'
+```
 
 ## Development
 
-*wip*
-
-*intro to development section*
-
 ### Requirements
 
-*wip*
+- Node.js 18+ (20+ recommended)
 
-* Nodejs (minimum version 22)
+### Setup
 
-### Configuration
+```bash
+git clone https://github.com/cmdcode/nostr-sdk
+cd nostr-sdk
+npm install
+```
 
-*wip*
+### Scripts
 
-There will be environment variables to configure the demo scripts.
+| Command | Description |
+|---------|-------------|
+| `npm run check` | TypeScript type checking |
+| `npm run lint` | Biome linting |
+| `npm run lint:fix` | Auto-fix linting issues |
+| `npm run format` | Format code with Biome |
+| `npm run test` | Run test suite |
+| `npm run build` | Build distribution |
+| `npm run package` | Full pipeline (lint, check, test, build) |
 
-### Checks and Linting
+### Build Outputs
 
-*wip*
-
-There are `check` and `lint` scripts available for code checking.
-
-### Running the Demo Scripts
-
-*wip*
-
-There will be scripts located in `/dev/scripts` for simulating development relays and nodes.
-
-### Running the Test Suite
-
-*wip*
-
-There will be a suite of unit and integration tests located in `/test`. These tests will include resources from `/dev` to simulate relays and nodes for testing.
-
-### Automated Testing
-
-*wip*
-
-The test suite will be triggered by `.github/workflows/ci.yml` workflow when pushed to the git server (github).
-
-### Build and Release
-
-*wip*
-
-The project can be built, released, and published using the `build`, `release` and `publish` scripts.
-
-The release will be tagged and created on the git server using the `.github/workflows/release.yml` workflow.
-
-## Contribution
-
-*wip*
-
-This is a free and open-source project. All contriubutions are welcome. 
+- `dist/index.js` - ES Modules
+- `dist/script.js` - Browser IIFE (available via unpkg CDN)
 
 ## Resources
 
-*wip*
+- [NIP-01: Basic Protocol](https://github.com/nostr-protocol/nips/blob/master/01.md)
+- [NIP-04: Encrypted Direct Messages](https://github.com/nostr-protocol/nips/blob/master/04.md)
+- [NIP-44: Versioned Encryption](https://github.com/nostr-protocol/nips/blob/master/44.md)
+- [@noble/curves](https://github.com/paulmillr/noble-curves) - Cryptography
+- [@noble/hashes](https://github.com/paulmillr/noble-hashes) - Hashing
+- [@noble/ciphers](https://github.com/paulmillr/noble-ciphers) - Ciphers
+- [Zod](https://zod.dev) - Schema validation
 
-This will include a list of links to relevant sources, such as:
+## Contributing
 
-* Links to the NIP-01, NIP-04, and NIP-44 specifications.
-* Links to the package dependencies (@noble, @scure, @vbyte, zod)
+Contributions are welcome. Please open an issue or submit a pull request.
 
 ## License
 
-*wip*
-
-This project is released under the MIT license.
+[MIT License](LICENSE)
