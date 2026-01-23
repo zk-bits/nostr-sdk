@@ -1,35 +1,128 @@
+/**
+ * Integration Test Runner
+ *
+ * Orchestrates all integration tests across feature, failure, and stress categories.
+ */
 import tape from 'tape'
 
-import { NostrRelay } from '@/class/relay.js'
-import { TEST_PORTS } from '#/config.js'
+// ─────────────────────────────────────────────────────────────────
+// Relay Tests
+// ─────────────────────────────────────────────────────────────────
+import relay_feature from './relay/feature.test.js'
+import relay_failure from './relay/failure.test.js'
+import relay_stress  from './relay/stress.test.js'
 
-import socket_test       from './socket.test.js'
-import relay_tests       from './relay.test.js'
-import subscription_tests from './subscription.test.js'
-import client_tests      from './client.test.js'
+// ─────────────────────────────────────────────────────────────────
+// Socket Tests
+// ─────────────────────────────────────────────────────────────────
+import socket_feature from './socket/feature.test.js'
+import socket_failure from './socket/failure.test.js'
+import socket_stress  from './socket/stress.test.js'
 
-tape('Socket Integration Tests', async t => {
-  // Create a new relay for testing.
-  const relay = new NostrRelay()
-  // Start the relay.
-  await relay.start({ port: TEST_PORTS.SOCKET_RELAY })
-  // Run the socket test.
-  await socket_test(t)
-  // Stop the relay.
-  t.teardown(() => { relay.stop() })
-})
+// ─────────────────────────────────────────────────────────────────
+// Subscription Tests
+// ─────────────────────────────────────────────────────────────────
+import subscription_feature from './subscription/feature.test.js'
+import subscription_failure from './subscription/failure.test.js'
+import subscription_stress  from './subscription/stress.test.js'
 
-tape('Relay Integration Tests', async t => {
-  await relay_tests(t)
+// ─────────────────────────────────────────────────────────────────
+// Client Tests
+// ─────────────────────────────────────────────────────────────────
+import client_feature from './client/feature.test.js'
+import client_failure from './client/failure.test.js'
+import client_stress  from './client/stress.test.js'
+
+// ─────────────────────────────────────────────────────────────────
+// Node Tests
+// ─────────────────────────────────────────────────────────────────
+import node_feature from './node/feature.test.js'
+import node_failure from './node/failure.test.js'
+import node_stress  from './node/stress.test.js'
+
+// ═════════════════════════════════════════════════════════════════
+// Feature Tests (Happy Path)
+// ═════════════════════════════════════════════════════════════════
+
+tape('Relay Feature Tests', async t => {
+  await relay_feature(t)
   t.end()
 })
 
-tape('Subscription Integration Tests', async t => {
-  await subscription_tests(t)
+tape('Socket Feature Tests', async t => {
+  await socket_feature(t)
   t.end()
 })
 
-tape('Client Integration Tests', async t => {
-  await client_tests(t)
+tape('Subscription Feature Tests', async t => {
+  await subscription_feature(t)
+  t.end()
+})
+
+tape('Client Feature Tests', async t => {
+  await client_feature(t)
+  t.end()
+})
+
+tape('Node Feature Tests', async t => {
+  await node_feature(t)
+  t.end()
+})
+
+// ═════════════════════════════════════════════════════════════════
+// Failure Tests (Error Scenarios)
+// ═════════════════════════════════════════════════════════════════
+
+tape('Relay Failure Tests', async t => {
+  await relay_failure(t)
+  t.end()
+})
+
+tape('Socket Failure Tests', async t => {
+  await socket_failure(t)
+  t.end()
+})
+
+tape('Subscription Failure Tests', async t => {
+  await subscription_failure(t)
+  t.end()
+})
+
+tape('Client Failure Tests', async t => {
+  await client_failure(t)
+  t.end()
+})
+
+tape('Node Failure Tests', async t => {
+  await node_failure(t)
+  t.end()
+})
+
+// ═════════════════════════════════════════════════════════════════
+// Stress Tests (Performance)
+// ═════════════════════════════════════════════════════════════════
+
+tape('Relay Stress Tests', async t => {
+  await relay_stress(t)
+  t.end()
+})
+
+tape('Socket Stress Tests', async t => {
+  await socket_stress(t)
+  t.end()
+})
+
+tape('Subscription Stress Tests', async t => {
+  await subscription_stress(t)
+  t.end()
+})
+
+tape('Client Stress Tests', async t => {
+  await client_stress(t)
+  t.end()
+})
+
+tape('Node Stress Tests', async t => {
+  await node_stress(t)
   t.end()
 })

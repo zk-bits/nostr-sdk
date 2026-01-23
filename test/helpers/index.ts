@@ -4,6 +4,9 @@ import { now }                      from '@/lib/util.js'
 
 import type { EventConfig, EventFilter, SignedEvent } from '@/types/index.js'
 
+// Re-export MockWebSocket from mock-socket module
+export { MockWebSocket, createAutoOpenMockSocket } from './mock-socket.js'
+
 /**
  * Generates a test keypair for signing events.
  * @returns Object with seckey (hex) and pubkey (hex)

@@ -1,3 +1,4 @@
+/** Filter criteria for querying events from relays. */
 export interface EventFilter {
   ids     ?: string[]
   authors ?: string[]
@@ -8,14 +9,16 @@ export interface EventFilter {
   [ key : string ] : any
 }
 
+/** Configuration for creating a new event. */
 export interface EventConfig {
-  content     : string
+  content?    : string
   created_at? : number
   kind        : number
   pubkey      : string
   tags?       : string[][]
 }
 
+/** A complete event template ready for signing. */
 export interface EventTemplate {
   content    : string
   created_at : number
@@ -24,14 +27,17 @@ export interface EventTemplate {
   tags       : string[][]
 }
 
+/** An event with computed ID but no signature. */
 export interface UnsignedEvent extends EventTemplate {
   id : string
 }
 
+/** A fully signed Nostr event. */
 export interface SignedEvent extends UnsignedEvent {
   sig : string
 }
 
+/** A signed event with parsed content data. */
 export interface ParsedEvent <T> extends SignedEvent {
   data : T
 }

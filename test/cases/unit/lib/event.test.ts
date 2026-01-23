@@ -7,7 +7,7 @@ import {
   verify_event,
   get_event_tag,
   filter_event_tags,
-  is_event_recipient,
+  is_pubkey_mentioned,
   is_event_expired
 } from '@/lib/event.js'
 
@@ -344,7 +344,7 @@ export default function event_tests (t: Test) {
       })
       const signed = sign_event(template, seckey)
 
-      t.ok(is_event_recipient(signed, target), 'returns true for recipient')
+      t.ok(is_pubkey_mentioned(signed, target), 'returns true for recipient')
       t.end()
     })
 
@@ -360,7 +360,7 @@ export default function event_tests (t: Test) {
       })
       const signed = sign_event(template, seckey)
 
-      t.notOk(is_event_recipient(signed, other), 'returns false for non-recipient')
+      t.notOk(is_pubkey_mentioned(signed, other), 'returns false for non-recipient')
       t.end()
     })
 

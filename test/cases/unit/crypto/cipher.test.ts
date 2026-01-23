@@ -5,7 +5,7 @@ import {
   nip04_decrypt,
   nip44_encrypt,
   nip44_decrypt
-} from '@/crypto/cipher.js'
+} from '@/lib/encrypt.js'
 
 // Note: Full cipher tests are skipped due to implementation issues:
 // - nip04: IV length mismatch (24 bytes generated, 16 bytes expected by AES-CBC)

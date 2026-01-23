@@ -5,3 +5,8 @@ export interface RelayConfig {
   timeout    : number
   verbose    : boolean
 }
+
+export interface RelayPolicy {
+  send : boolean
+  recv : boolean
+}

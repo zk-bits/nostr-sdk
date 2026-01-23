@@ -12,7 +12,7 @@ import type {
 } from '@/types/index.js'
 
 /**
- * O(1) key-based deduplication cache with LRU eviction.
+ * O(1) key-based deduplication cache with FIFO eviction.
  * Uses a Set with FIFO eviction when the limit is reached.
  */
 export class KeyCache {
@@ -44,15 +44,15 @@ export class KeyCache {
    * @param key  The key to add
    */
   public add (key : string) : void {
-    // Add the hash to the cache.
-    this._cache.add(key)
-    // If the cache is full, remove the oldest hash.
+    // If the cache is at limit, evict before adding.
     if (this._cache.size >= this._limit) {
       // Get the oldest hash.
       const head = this._next()
       // If the oldest hash is defined, remove it.
       if (head) this._cache.delete(head)
     }
+    // Add the hash to the cache.
+    this._cache.add(key)
   }
 
   /** Clears all keys from the cache. */
@@ -168,5 +168,14 @@ export class EventCache {
         this._cache.delete(key)
       }
     }
+  }
+
+  /**
+   * Stops the pruning timer and releases resources.
+   * Call this method when the cache is no longer needed to prevent memory leaks.
+   */
+  public close () : void {
+    // Clear the pruning timer.
+    clearInterval(this._timer)
   }
 }

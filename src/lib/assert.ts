@@ -29,15 +29,16 @@ export function assert_exists <T> (
 }
 
 /**
- * Asserts that a value is a valid base64 string.
+ * Asserts that a value is a valid base64 or base64url string.
  * @param value  The value to check
- * @throws Error If value is not a valid base64 string
+ * @throws Error If value is not a valid base64/base64url string
  */
 export function assert_base64 (value : unknown) : asserts value is string {
   if (typeof value !== 'string') {
     throw new Error('value is not a string')
   }
-  if (!/^[a-zA-Z0-9+/]+={0,2}$/.test(value)) {
+  // Accept both standard base64 (+/) and base64url (-_) characters
+  if (!/^[a-zA-Z0-9+/\-_]+={0,2}$/.test(value)) {
     throw new Error('value is not a valid base64 string')
   }
 }

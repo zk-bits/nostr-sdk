@@ -1,9 +1,11 @@
 import { Test } from 'tape'
 import { z }    from 'zod'
 
-import { parse_content, parse_event } from '@/lib/parse.js'
-import { create_event, sign_event }   from '@/lib/event.js'
-import { gen_seckey, get_pubkey }     from '@/crypto/ecc.js'
+import { parse_content, parse_event, parse_query } from '@/lib/parse.js'
+import { create_event, sign_event }                from '@/lib/event.js'
+import { gen_seckey, get_pubkey }                  from '@/crypto/ecc.js'
+
+import type { QueryResponse } from '@/types/index.js'
 
 export default function parse_tests (t: Test) {
   t.test('parse_content', st => {
@@ -175,6 +177,160 @@ export default function parse_tests (t: Test) {
       t.equal(result.result?.pubkey, pubkey, 'preserves pubkey')
       t.equal(result.result?.created_at, 12345, 'preserves created_at')
       t.deepEqual(result.result?.tags, [['t', 'test']], 'preserves tags')
+      t.end()
+    })
+
+    st.end()
+  })
+
+  t.test('parse_query', st => {
+    st.test('resolves with parsed events on success', async t => {
+      const seckey = gen_seckey()
+      const pubkey = get_pubkey(seckey)
+      const event  = sign_event(
+        create_event({
+          content : JSON.stringify({ message: 'hello' }),
+          kind    : 1,
+          pubkey
+        }),
+        seckey
+      )
+
+      const queryResponse: QueryResponse = {
+        ok     : true,
+        events : [event]
+      }
+
+      const result = await parse_query(Promise.resolve(queryResponse))
+
+      t.equal(result.length, 1, 'returns one event')
+      t.deepEqual(result[0].data, { message: 'hello' }, 'parsed content')
+      t.equal(result[0].id, event.id, 'preserves event id')
+      t.end()
+    })
+
+    st.test('throws when query fails (res.ok = false)', async t => {
+      const queryResponse: QueryResponse = {
+        ok     : false,
+        reason : 'connection failed'
+      }
+
+      try {
+        await parse_query(Promise.resolve(queryResponse))
+        t.fail('should have thrown')
+      } catch (err) {
+        t.equal(err, 'connection failed', 'throws the reason')
+      }
+      t.end()
+    })
+
+    st.test('throws when no events found', async t => {
+      const queryResponse: QueryResponse = {
+        ok     : true,
+        events : []
+      }
+
+      try {
+        await parse_query(Promise.resolve(queryResponse))
+        t.fail('should have thrown')
+      } catch (err) {
+        t.ok((err as Error).message.includes('no events found'), 'throws no events error')
+      }
+      t.end()
+    })
+
+    st.test('throws when all events fail validation', async t => {
+      const seckey = gen_seckey()
+      const pubkey = get_pubkey(seckey)
+      const event  = sign_event(
+        create_event({
+          content : 'not valid json',
+          kind    : 1,
+          pubkey
+        }),
+        seckey
+      )
+
+      const queryResponse: QueryResponse = {
+        ok     : true,
+        events : [event]
+      }
+
+      try {
+        await parse_query(Promise.resolve(queryResponse))
+        t.fail('should have thrown')
+      } catch (err) {
+        t.ok((err as Error).message.includes('all events failed validation'), 'throws validation error')
+      }
+      t.end()
+    })
+
+    st.test('filters out invalid events, keeps valid ones', async t => {
+      const seckey = gen_seckey()
+      const pubkey = get_pubkey(seckey)
+
+      const validEvent = sign_event(
+        create_event({
+          content : JSON.stringify({ valid: true }),
+          kind    : 1,
+          pubkey
+        }),
+        seckey
+      )
+
+      const invalidEvent = sign_event(
+        create_event({
+          content : 'not json',
+          kind    : 1,
+          pubkey
+        }),
+        seckey
+      )
+
+      const queryResponse: QueryResponse = {
+        ok     : true,
+        events : [invalidEvent, validEvent]
+      }
+
+      const result = await parse_query(Promise.resolve(queryResponse))
+
+      t.equal(result.length, 1, 'returns only valid event')
+      t.deepEqual(result[0].data, { valid: true }, 'contains valid event data')
+      t.end()
+    })
+
+    st.test('applies schema validation to each event', async t => {
+      const seckey = gen_seckey()
+      const pubkey = get_pubkey(seckey)
+      const schema = z.object({ type: z.string() })
+
+      const validEvent = sign_event(
+        create_event({
+          content : JSON.stringify({ type: 'note' }),
+          kind    : 1,
+          pubkey
+        }),
+        seckey
+      )
+
+      const invalidSchemaEvent = sign_event(
+        create_event({
+          content : JSON.stringify({ type: 123 }), // wrong type
+          kind    : 1,
+          pubkey
+        }),
+        seckey
+      )
+
+      const queryResponse: QueryResponse = {
+        ok     : true,
+        events : [invalidSchemaEvent, validEvent]
+      }
+
+      const result = await parse_query(Promise.resolve(queryResponse), schema)
+
+      t.equal(result.length, 1, 'returns only schema-valid event')
+      t.deepEqual(result[0].data, { type: 'note' }, 'contains schema-valid data')
       t.end()
     })
 

@@ -1,8 +1,8 @@
-import { Buff }        from '@vbyte/buff'
-import { base64 }      from '@scure/base'
-import { hmac }        from '@noble/hashes/hmac.js'
-import { sha256 }      from '@noble/hashes/sha2.js'
-import { concatBytes } from '@noble/hashes/utils.js'
+import { Buff }           from '@vbyte/buff'
+import { base64urlnopad } from '@scure/base'
+import { hmac }           from '@noble/hashes/hmac.js'
+import { sha256 }         from '@noble/hashes/sha2.js'
+import { concatBytes }    from '@noble/hashes/utils.js'
 
 import { extract, expand } from '@noble/hashes/hkdf.js'
 
@@ -12,11 +12,22 @@ const decoder = new TextDecoder()
 const minPlaintextSize = 0x0001 // 1b msg => padded to 32b
 const maxPlaintextSize = 0xffff // 65535 (64kb-1) => padded to 64kb
 
+/**
+ * Derives a shared conversation key from a secret using HKDF-SHA256 per NIP-44.
+ * @param shared_secret  The shared secret as a hex string
+ * @returns              The derived 32-byte conversation key
+ */
 export function get_conversation_key (shared_secret : string): Uint8Array {
   const secret = Buff.hex(shared_secret)
   return extract(sha256, secret, Buff.str('nip44-v2'))
 }
 
+/**
+ * Derives ChaCha20 and HMAC keys from a conversation key and nonce.
+ * @param convo_key  The 32-byte conversation key
+ * @param nonce      The 32-byte nonce
+ * @returns          Object containing chacha_key (32 bytes), chacha_nonce (12 bytes), and hmac_key (32 bytes)
+ */
 export function get_message_keys (
   convo_key : Uint8Array,
   nonce     : Uint8Array,
@@ -29,6 +40,12 @@ export function get_message_keys (
   }
 }
 
+/**
+ * Calculates the padded length for plaintext per NIP-44 padding rules.
+ * @param len  The unpadded plaintext length
+ * @returns    The padded length
+ * @throws     Error if len is not a positive integer
+ */
 export function calc_padded_len (len: number) : number {
   if (!Number.isSafeInteger(len) || len < 1) throw new Error('expected positive integer')
   if (len <= 32) return 32
@@ -37,6 +54,12 @@ export function calc_padded_len (len: number) : number {
   return chunk * (Math.floor((len - 1) / chunk) + 1)
 }
 
+/**
+ * Writes a 16-bit unsigned integer in big-endian format.
+ * @param num  The number to write (1 to 65535)
+ * @returns    A 2-byte Uint8Array in big-endian format
+ * @throws     Error if num is not between 1 and 65535
+ */
 export function write_u16_be (num: number) : Uint8Array {
   if (!Number.isSafeInteger(num) || num < minPlaintextSize || num > maxPlaintextSize)
     throw new Error('invalid plaintext size: must be between 1 and 65535 bytes')
@@ -45,6 +68,11 @@ export function write_u16_be (num: number) : Uint8Array {
   return arr
 }
 
+/**
+ * Pads plaintext with length prefix and null bytes per NIP-44.
+ * @param plaintext  The plaintext string to pad
+ * @returns          The padded message as a Uint8Array
+ */
 export function pad_message (plaintext: string) : Uint8Array {
   const unpadded    = encoder.encode(plaintext)
   const unpaddedLen = unpadded.length
@@ -53,6 +81,12 @@ export function pad_message (plaintext: string) : Uint8Array {
   return concatBytes(prefix, unpadded, suffix)
 }
 
+/**
+ * Removes padding from a decrypted message.
+ * @param padded  The padded message as a Uint8Array
+ * @returns       The unpadded plaintext string
+ * @throws        Error if padding is invalid
+ */
 export function unpad_message (padded: Uint8Array) : string {
   const unpaddedLen = new DataView(padded.buffer).getUint16(0)
   const unpadded = padded.subarray(2, 2 + unpaddedLen)
@@ -66,6 +100,14 @@ export function unpad_message (padded: Uint8Array) : string {
   return decoder.decode(unpadded)
 }
 
+/**
+ * Computes HMAC-SHA256 with additional authenticated data.
+ * @param key      The HMAC key
+ * @param message  The message to authenticate
+ * @param aad      The additional authenticated data (must be 32 bytes)
+ * @returns        The HMAC digest
+ * @throws         Error if AAD is not 32 bytes
+ */
 export function hmac_aad (
   key     : Uint8Array,
   message : Uint8Array,
@@ -76,12 +118,12 @@ export function hmac_aad (
   return hmac(sha256, key, combined)
 }
 
-// metadata: always 65b (version: 1b, nonce: 32b, max: 32b)
-// plaintext: 1b to 0xffff
-// padded plaintext: 32b to 0xffff
-// ciphertext: 32b+2 to 0xffff+2
-// raw payload: 99 (65+32+2) to 65603 (65+0xffff+2)
-// compressed payload (base64): 132b to 87472b
+/**
+ * Decodes a base64url-encoded NIP-44 payload into its components.
+ * @param payload  The base64url-encoded payload string
+ * @returns        Object containing nonce (32 bytes), ciphertext, and mac (32 bytes)
+ * @throws         Error if payload is invalid or uses unknown encryption version
+ */
 export function decode_payload (
   payload: string
 ) : { nonce: Uint8Array; ciphertext: Uint8Array; mac: Uint8Array } {
@@ -91,7 +133,7 @@ export function decode_payload (
   if (payload[0] === '#') throw new Error('unknown encryption version')
   let data: Uint8Array
   try {
-    data = base64.decode(payload)
+    data = base64urlnopad.decode(payload)
   } catch (error) {
     throw new Error(`invalid base64: ${(error as any).message}`)
   }

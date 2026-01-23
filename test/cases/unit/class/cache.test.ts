@@ -45,17 +45,18 @@ export default function cache_tests (t: Test) {
     })
 
     st.test('FIFO eviction when at capacity', t => {
-      // The cache evicts when size >= limit, so with limit 3:
-      // After adding 'a', 'b', 'c' (size=3), adding 'd' triggers eviction
+      // The cache evicts when size >= limit BEFORE adding a new key, so with limit 3:
+      // After adding 'a', 'b', 'c' (size=3), adding 'd' triggers eviction of 'a'
       const cache = new KeyCache(3)
       cache.add('a')
       cache.add('b')
-      cache.add('c') // size=3, triggers eviction of 'a'
+      cache.add('c') // size=3, no eviction yet
+      cache.add('d') // size >= limit, evicts 'a' before adding 'd'
 
-      // The eviction happens when size >= limit, so 'a' is evicted before 'd' is even added
       t.notOk(cache.has('a'), 'oldest key evicted on reaching limit')
       t.ok(cache.has('b'), 'b still present')
-      t.ok(cache.has('c'), 'c added')
+      t.ok(cache.has('c'), 'c still present')
+      t.ok(cache.has('d'), 'd added')
       t.end()
     })
 

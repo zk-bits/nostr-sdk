@@ -3,21 +3,25 @@ import { z } from 'zod'
 type Literal = z.infer<typeof literal>
 type Json    = Literal | { [key : string] : Json } | Json[]
 
-export const big     = z.bigint()
-export const bool    = z.boolean()
-export const date    = z.date()
-export const num     = z.number().min(Number.MIN_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER)
-export const int     = num.int()
-export const u8a     = z.instanceof(Uint8Array)
-export const str     = z.string()
-export const stamp   = int.min(500_000_000)
-export const any     = z.any()
-export const zod     = z
+export const big   = z.bigint()
+export const bool  = z.boolean()
+export const date  = z.date()
+
+export const num = z.number()
+  .min(Number.MIN_SAFE_INTEGER)
+  .max(Number.MAX_SAFE_INTEGER)
+
+export const int   = num.int()
+export const u8a   = z.instanceof(Uint8Array)
+export const str   = z.string()
+export const stamp = int.min(500_000_000)
+export const any   = z.any()
+export const zod   = z
 export const char  = int.min(0).max(0xFF)
 export const short = int.min(0).max(0xFFFF)
 export const uint  = int.min(0).max(0xFFFFFFFF)
 
-export const float  = z.number().refine((e) => String(e).includes('.'))
+export const float = z.number().refine((e) => String(e).includes('.'))
 
 export const float2 = float.refine((e) => {
   const parts = String(e).split('.').at(1)

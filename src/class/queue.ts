@@ -58,7 +58,7 @@ export class MessageQueue {
     if (!msg) return
     // Send the message to the socket.
     try {
-      this._socket.ws.send(JSON.stringify(msg))
+      this._socket._send(msg)
     } catch {
       // Re-queue the message on failure.
       this._queue.unshift(msg)

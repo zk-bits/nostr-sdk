@@ -61,12 +61,33 @@ npm run release      # Create git tag and trigger GitHub release
 
 Zod-based validation for events, messages, and base types.
 
+## Documentation
+
+### Code Conventions
+See `docs/CONVENTIONS.md` for detailed coding style guidelines including:
+- Naming conventions (files, functions, classes, types)
+- Import organization patterns
+- Class structure template
+- Type patterns (`Result<T>`, interfaces)
+- Formatting rules (vertical alignment)
+
+### Nostr Protocol Specifications
+The `docs/spec/` directory contains NIP (Nostr Implementation Possibilities) references:
+- `NIP_01.md` - Basic protocol flow (events, subscriptions, filters)
+- `NIP_04.md` - Encrypted direct messages (deprecated)
+- `NIP_09.md` - Event deletion
+- `NIP_11.md` - Relay information document
+- `NIP_40.md` - Expiration timestamp
+- `NIP_42.md` - Authentication of clients to relays
+- `NIP_44.md` - Versioned encryption (current standard)
+
 ## Code Style
 
 - Path alias imports: use `@/class/socket.js` not relative paths
 - Strict TypeScript compilation (noImplicitAny, strict mode)
 - Biome enforces no unused imports/variables as errors
 - `any` type and banned types are allowed when necessary
+- See `docs/CONVENTIONS.md` for full style guide
 
 ## Build Output
 

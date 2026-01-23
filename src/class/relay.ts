@@ -36,6 +36,12 @@ export const RELAY_CONFIG : RelayConfig = {
 
 /* ================ [ Server Class ] ================ */
 
+/**
+ * In-memory Nostr relay for testing and development.
+ * Handles client connections, event storage, and subscription management.
+ * @emits ready   When the relay is listening
+ * @emits closed  When the relay stops
+ */
 export class NostrRelay extends EventEmitter<{
   closed : [ void ],
   ready  : [ void ]
@@ -96,7 +102,8 @@ export class NostrRelay extends EventEmitter<{
   _close () {
     // For each active session:
     for (const [ _, session ] of this.sessions) {
-      // Close the session.
+      // Cleanup session listeners and close socket.
+      session.cleanup()
       session.socket.close()
     }
     // Clear the sessions.
@@ -105,10 +112,13 @@ export class NostrRelay extends EventEmitter<{
     this._subs.clear()
     // Clear the filters.
     this._filters.clear()
-    // Clear the cache.
+    // Close and clear the cache.
+    this._cache.close()
     this._cache.clear()
     // Clear the timer.
     clearInterval(this._timer)
+    // Remove all listeners from the WebSocket server.
+    if (this._wss) this._wss.removeAllListeners()
     // Clear the websocket server.
     this._wss   = null
     // Set the relay to not ready.
@@ -172,6 +182,7 @@ export class NostrRelay extends EventEmitter<{
     this.log.info('relay starting up...')
   }
 
+  /** Disconnects a client and removes all their subscriptions. */
   disconnect (client_id : string) {
     // Delete the session.
     this._sessions.delete(client_id)
@@ -189,6 +200,7 @@ export class NostrRelay extends EventEmitter<{
     this.log.info('client disconnected:', client_id)
   }
 
+  /** Publishes an event to all matching subscriptions. */
   publish (event : SignedEvent) {
     // Cache the event.
     this.cache.add(event)
@@ -210,6 +222,7 @@ export class NostrRelay extends EventEmitter<{
     }
   }
   
+  /** Starts the relay server and returns when ready. */
   async start (options : Partial<WebSocket.ServerOptions> = {}) : Promise<void> {
     // Return a promise to resolve the startup.
     return new Promise<void>((resolve, reject) => {
@@ -224,6 +237,7 @@ export class NostrRelay extends EventEmitter<{
     }).catch(err => { throw new Error(err) })
   }
 
+  /** Stops the relay server and closes all connections. */
   stop () {
     // If the relay is not ready, return.
     if (!this.ready) return
@@ -233,6 +247,7 @@ export class NostrRelay extends EventEmitter<{
     this.wss.close()
   }
 
+  /** Registers a client subscription with the given filters. */
   subscribe (client_id : string, sub_id : string, filters : EventFilter[]) {
     // If the client is not found, return.
     if (!this._sessions.has(client_id)) return
@@ -242,6 +257,7 @@ export class NostrRelay extends EventEmitter<{
     this._subs.set(sub_id, client_id)
   }
 
+  /** Removes a subscription by ID. */
   unsubscribe (sub_id : string) {
     // Delete the subscription filters.
     this._filters.delete(sub_id)
@@ -250,11 +266,20 @@ export class NostrRelay extends EventEmitter<{
   }
 }
 
+/**
+ * Represents a connected client session on the relay.
+ * Handles message parsing, event publishing, and subscription requests.
+ */
 export class ClientSession {
 
   private readonly _id     : string
   private readonly _relay  : NostrRelay
   private readonly _socket : WebSocket
+
+  /** Bound handler references for proper cleanup. */
+  private readonly _onMessage : (msg: Buffer) => void
+  private readonly _onError   : (err: Error) => void
+  private readonly _onClose   : () => void
 
   constructor (
     relay     : NostrRelay,
@@ -265,10 +290,15 @@ export class ClientSession {
     this._relay  = relay
     this._socket = socket
 
-    this.socket.on('message', msg => this._handler(msg.toString()))
-    this.socket.on('error',   err => this._on_error(err))
-    this.socket.on('close',   _   => this._relay.disconnect(this.id))
-    
+    // Create bound handler references for cleanup.
+    this._onMessage = (msg: Buffer) => this._handler(msg.toString())
+    this._onError   = (err: Error) => this._on_error(err)
+    this._onClose   = () => this._relay.disconnect(this.id)
+
+    this.socket.on('message', this._onMessage)
+    this.socket.on('error',   this._onError)
+    this.socket.on('close',   this._onClose)
+
     this.log.info('client connected:', this.id, socket.url)
   }
 
@@ -373,13 +403,30 @@ export class ClientSession {
     }
   }
 
+  /**
+   * Removes all event listeners from the socket.
+   * Call this method before closing to prevent memory leaks.
+   */
+  cleanup () {
+    this.socket.off('message', this._onMessage)
+    this.socket.off('error',   this._onError)
+    this.socket.off('close',   this._onClose)
+  }
+
+  /** Sends a message to the connected client. */
   send (message : RelayMessage) {
     // Log the message.
     this.log.debug('sending message:', message)
-    // Validate the message.
-    validate_relay_message(message)
-    // Send the message.
-    this._socket.send(JSON.stringify(message))
+    try {
+      // Validate the message.
+      validate_relay_message(message)
+      // Send the message.
+      this._socket.send(JSON.stringify(message))
+    } catch (err) {
+      // Log the error.
+      this.log.info('failed to send message:', parse_error(err as Error))
+      if (this.relay.config.debug) console.error(err)
+    }
   }
 }
 

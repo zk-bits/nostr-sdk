@@ -7,6 +7,12 @@ interface Schema<T> {
   safeParse(data: unknown): { success: true; data: T } | { success: false; error: unknown }
 }
 
+/**
+ * Parses JSON content with optional schema validation.
+ * @param content  JSON string to parse
+ * @param schema   Optional Zod schema for validation
+ * @returns        Result with parsed data or error
+ */
 export function parse_content <T = unknown> (
   content : string,
   schema? : Schema<T>
@@ -25,6 +31,12 @@ export function parse_content <T = unknown> (
   return { ok : true, result : parsed.data }
 }
 
+/**
+ * Parses a signed event's content with optional schema validation.
+ * @param event   The signed event to parse
+ * @param schema  Optional Zod schema for content validation
+ * @returns       Result with parsed event or error
+ */
 export function parse_event <T = unknown> (
   event   : SignedEvent,
   schema? : Schema<T>
@@ -37,6 +49,13 @@ export function parse_event <T = unknown> (
   return { ok : true, result : { ...event, data : parsed.result } }
 }
 
+/**
+ * Parses a query response, validating each event's content.
+ * @param query   Promise resolving to query response
+ * @param schema  Optional Zod schema for content validation
+ * @returns       Promise resolving to array of parsed events
+ * @throws        Error if no valid events found
+ */
 export async function parse_query <T = unknown> (
   query   : Promise<QueryResponse>,
   schema? : Schema<T>

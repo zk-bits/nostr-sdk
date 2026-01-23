@@ -15,7 +15,8 @@ import type {
   PublishResponse,
   RelayReceiptMessage,
   NostrSocketEvent,
-  RelayNoticeMessage
+  RelayNoticeMessage,
+  RelayEventMessage
 } from '@/types/index.js'
 
 /** Default configuration for NostrSocket instances. */
@@ -44,33 +45,39 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
   private readonly _subs   : Map<string, NostrSubscription> = new Map()
   private readonly _url    : string
 
-  private _init : boolean = false
-  private _ws   : WebSocket
+  private _closeTimer : NodeJS.Timeout | undefined
+  private _init       : boolean = false
+  private _ws         : WebSocket
 
   /**
    * Creates a new NostrSocket connection to a relay.
-   * @param host_url  WebSocket URL of the relay (ws:// or wss://)
-   * @param options   Optional configuration overrides
-   * @throws Error    If the URL is not a valid WebSocket URL
+   * @param relay    WebSocket URL (ws:// or wss://) or existing WebSocket instance
+   * @param options  Optional configuration overrides
+   * @throws Error   If URL is not a valid WebSocket URL
    */
   constructor (
-    host_url : string,
-    options  : Partial<NostrSocketConfig> = {}
+    relay   : string | WebSocket,
+    options : Partial<NostrSocketConfig> = {}
   ) {
     // Initialize the class.
     super()
-    // Validate the WebSocket URL.
-    if (!host_url || !(host_url.startsWith('ws://') || host_url.startsWith('wss://'))) {
-      throw new Error(`invalid WebSocket URL: ${host_url}`)
-    }
     // Initialize the configuration.
     this._config = { ...SOCKET_CONFIG, ...options }
     // Initialize the queue.
     this._queue  = new MessageQueue(this)
-    // Initialize the socket.
-    this._ws     = new WebSocket(host_url)
-    // Define the socket URL.
-    this._url    = host_url
+    // Handle string URL vs WebSocket instance.
+    if (typeof relay === 'string') {
+      // Validate the WebSocket URL.
+      if (!relay.startsWith('ws://') && !relay.startsWith('wss://')) {
+        throw new Error(`invalid WebSocket URL: ${relay}`)
+      }
+      this._url = relay
+      this._ws  = new WebSocket(relay)
+    } else {
+      // Use provided WebSocket directly.
+      this._url = relay.url
+      this._ws  = relay
+    }
     // Register an event listener for the open event.
     this.ws.addEventListener('open', () => this._open())
     // Register an event listener for the close event.
@@ -107,8 +114,12 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
   }
 
   private _close () {
+    // Clear the close timer if it exists.
+    clearTimeout(this._closeTimer)
+    // Clear the message queue.
+    this._queue.clear()
     // Unsubscribe from all subscriptions.
-    this._subs.forEach(sub => void sub.unsubscribe())
+    this._subs.forEach(sub => void sub.cancel())
     // Clear the subscriptions map.
     this._subs.clear()
     // Set the socket to not initialized.
@@ -124,6 +135,11 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
     this.emit('error', null, String(error))
   }
 
+  private _event (msg : RelayEventMessage) {
+    // Emit an event event.
+    this.emit('event', msg)
+  }
+
   // Handle websocket messages from the relay.
   private _handler (message : unknown) {
     // Parse the message.
@@ -136,6 +152,7 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
       this.emit('message', parsed.result)
       // Handle the message.
       switch (parsed.result[0]) {
+        case 'EVENT'  : this._event(parsed.result);   break
         case 'NOTICE' : this._notice(parsed.result);  break
         case 'OK'     : this._receipt(parsed.result); break
       }
@@ -164,13 +181,22 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
     this.emit('receipt', msg)
   }
 
+  public _send (msg : ClientMessage) {
+    // Validate the message.
+    validate_client_message(msg)
+    // Add the message to the queue.
+    this.ws.send(JSON.stringify(msg))
+  }
+
   /**
    * Closes the WebSocket connection after a delay.
    * @param delay  Delay in ms before closing (default: 100)
    */
   public close (delay : number = 100) {
+    // Clear any existing close timer to prevent multiple close attempts.
+    clearTimeout(this._closeTimer)
     // Setup a timer to close the connection.
-    setTimeout(() => {
+    this._closeTimer = setTimeout(() => {
       // If the websocket connection is open,
       if (this.ws.readyState === WebSocket.OPEN) {
         // Close the websocket connection.
@@ -218,21 +244,36 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
     const timeout = this.config.msg_timeout
     // Create a promise to resolve the publish result.
     return new Promise((resolve, reject) => {
+      // Track whether promise has been settled to prevent double resolution.
+      let settled = false
+      // Cleanup function to remove handler.
+      const cleanup = () => { this.off('receipt', handler) }
       // Set a timeout to reject the promise if the request times out.
-      const timer = setTimeout(() => reject(new Error(`publish timeout for ${this.url}`)), timeout)
-      // Subscribe to the receipt event.
-      this.within('receipt', (msg : RelayReceiptMessage) => {
+      const timer = setTimeout(() => {
+        if (settled) return
+        settled = true
+        cleanup()
+        reject(new Error(`publish timeout for ${this.url}`))
+      }, timeout)
+      // Handler for receipt events.
+      const handler = (msg : RelayReceiptMessage) => {
         // Unpack the receipt message.
         const [ _, event_id, ok, reason ] = msg
         // If the event ID matches, resolve the promise.
         if (event_id === event.id) {
+          if (settled) return
+          settled = true
           // Clear the timeout.
           clearTimeout(timer)
+          // Remove the handler.
+          cleanup()
           if (ok) resolve({ ok : true, event_id, relay })
           // If the publish failed, reject the promise.
           else reject({ ok : false, event_id, relay, reason })
         }
-      }, timeout)
+      }
+      // Subscribe to the receipt event.
+      this.on('receipt', handler)
       // Publish the event to the relay.
       this.send([ 'EVENT', event ])
     })
@@ -249,14 +290,14 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
     filters   : EventFilter | EventFilter[],
     duration? : number
   ) : Promise<SignedEvent[]> {
-    // Make sure the socket is connected.
+    // Ensure socket is connected before querying.
     await this.connect()
     // Create a new subscription.
     const sub = new NostrSubscription(filters, this)
     // Return the promise with the results.
     return sub.listen(duration).then((events) => {
       // Unsubscribe from the subscription.
-      sub.unsubscribe()
+      sub.cancel()
       // Resolve the promise with the events.
       return events
     })
@@ -280,16 +321,14 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
    * @returns        Promise that resolves with the active subscription
    * @throws         Error if subscription times out
    */
-  public async subscribe (
+  public subscribe (
     filters : EventFilter | EventFilter[]
-  ) : Promise<NostrSubscription> {
-    // Make sure the socket is connected.
-    await this.connect()
+  ) : NostrSubscription {
     // Create a new subscription.
     const sub = new NostrSubscription(filters, this)
     // Add the subscription to the subscriptions map.
-    this._subs.set(sub.id, sub)
+    this._subs.set(sub.sub_id, sub)
     // Activate the subscription.
-    return sub.subscribe()
+    return sub
   }
 }

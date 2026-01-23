@@ -63,10 +63,7 @@ socket.close()
 ```typescript
 const sub = await socket.subscribe({ kinds: [1], limit: 10 })
 
-sub.on('event', (msg) => {
-  const [, subId, event] = msg
-  console.log(event)
-})
+sub.on('event', (event) => console.log(event))
 ```
 
 ### Query Events
@@ -91,8 +88,8 @@ await client.connect()
 await client.publish(event)
 
 // Subscribe with automatic deduplication
-const sub = await client.subscribe({ kinds: [1] })
-sub.on('event', (subId, event) => console.log(event))
+const sub = client.subscribe({ kinds: [1] })
+sub.on('event', (event) => console.log(event))
 
 // Close all connections
 client.close()
@@ -126,7 +123,7 @@ new NostrSocket(url: string, options?: Partial<NostrSocketConfig>)
 |--------|---------|-------------|
 | `connect()` | `Promise<void>` | Establish connection |
 | `publish(event)` | `Promise<PublishResponse>` | Publish signed event |
-| `subscribe(filters)` | `Promise<NostrSubscription>` | Create persistent subscription |
+| `subscribe(filters)` | `NostrSubscription` | Create persistent subscription |
 | `query(filters, duration?)` | `Promise<SignedEvent[]>` | One-shot event query |
 | `close(delay?)` | `void` | Close connection |
 | `send(msg)` | `void` | Send message via queue |
@@ -164,7 +161,7 @@ Same as `NostrSocket`, but operations are distributed across all relays:
 - `connect()` - Resolves when first relay connects
 - `publish(event)` - Resolves on first successful publish
 - `query(filters, duration?)` - Resolves with first relay's response
-- `subscribe(filter)` - Returns `SubscriptionManager` with deduplication
+- `subscribe(filter)` - Returns `SubscriptionManager` directly with deduplication
 - `close()` - Closes all connections
 
 ## Crypto Module
@@ -224,7 +221,7 @@ import * as LIB from '@vbyte/nostr-sdk/lib'
 | `get_event_id(template)` | Compute event ID hash |
 | `get_event_tag(event, tag)` | Get first tag by name |
 | `filter_event_tags(event, tag)` | Get all tags by name |
-| `is_event_recipient(event, pubkey)` | Check if pubkey is in 'p' tags |
+| `is_pubkey_mentioned(event, pubkey)` | Check if pubkey is in 'p' tags |
 | `is_event_expired(event, current?)` | Check if event has expired |
 
 ### Filtering
@@ -286,7 +283,8 @@ npm install
 
 ### Build Outputs
 
-- `dist/index.js` - ES Modules
+- `dist/main.cjs` - CommonJS
+- `dist/module.mjs` - ES Modules
 - `dist/script.js` - Browser IIFE (available via unpkg CDN)
 
 ## Resources

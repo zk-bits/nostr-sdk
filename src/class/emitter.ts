@@ -39,6 +39,10 @@ export class EventEmitter<T extends Record<string, any[]> = {}> {
     return handlers !== undefined && handlers.size > 0
   }
 
+  /**
+   * Subscribes a wildcard handler that receives all events.
+   * @param handler  Function to be called when any event is emitted, receives event name as first argument
+   */
   public all <K extends keyof T> (
     handler : (topic : keyof T, ...args: T[K]) => void | Promise<void>
   ) : void {
@@ -79,27 +83,32 @@ export class EventEmitter<T extends Record<string, any[]> = {}> {
   }
 
   /**
-   * Subscribes a handler that automatically unsubscribes after a specified timeout.
+   * Subscribes a one-time handler that unsubscribes after the first event or timeout.
    * @param eventName  Name of the event to subscribe to
-   * @param handler    Function to be called when event is emitted
-   * @param timeoutMs  Time in milliseconds after which the handler is unsubscribed
-   * @emits message   When the subscribed event is emitted (within timeout period)
+   * @param handler    Function to be called once when event is emitted
+   * @param timeoutMs  Time in milliseconds after which the handler is unsubscribed if no event
+   * @emits message   When the subscribed event is emitted (only once, within timeout period)
    */
   public within <K extends keyof T> (
     eventName : K,
     handler   : (...args: T[K]) => void | Promise<void>,
     timeoutMs : number
   ): void {
-    const timeoutHandler = (...args: T[K]): void => {
+    const cleanup = () => {
+      clearTimeout(timer)
+      this.off(eventName, wrappedHandler)
+    }
+
+    const wrappedHandler = (...args: T[K]): void => {
+      cleanup()
       void handler(...args)
     }
 
-    const timer = setTimeout(() => {
-      this.off(eventName, timeoutHandler)
-    }, timeoutMs)
+    const timer = setTimeout(cleanup, timeoutMs)
     if (typeof timer.unref === 'function') timer.unref()
 
-    this.on(eventName, timeoutHandler)
+    this.wrapperMap.set(handler, wrappedHandler)
+    this.on(eventName, wrappedHandler)
   }
 
   /**
@@ -143,10 +152,12 @@ export class EventEmitter<T extends Record<string, any[]> = {}> {
     eventName : K,
     handler   : (...args: T[K]) => void | Promise<void>
   ) : void {
-    const handlers = this.getEventHandlers(eventName as string)
-    // Try to remove the handler directly
+    const handlers = this.eventMap.get(eventName)
+    // If no handlers exist for this event, nothing to remove.
+    if (!handlers) return
+    // Try to remove the handler directly.
     if (handlers.delete(handler)) return
-    // If not found, check if it's a wrapped handler (from once())
+    // If not found, check if it's a wrapped handler (from once/within).
     const wrapper = this.wrapperMap.get(handler)
     if (wrapper) {
       handlers.delete(wrapper)

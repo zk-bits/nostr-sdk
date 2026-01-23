@@ -4,7 +4,7 @@ import { now }  from '@/lib/index.js'
 import {
   hash_message,
   create_signature,
-  verify_signature
+  verify_signature,
 } from '@/crypto/index.js'
 
 import type {
@@ -23,6 +23,7 @@ import * as Schema from '@/schema/index.js'
 export function create_event (config : EventConfig) : EventTemplate {
   return Schema.EVENT.template.parse({
     ...config,
+    content    : config.content    ?? '',
     created_at : config.created_at ?? now(),
     tags       : config.tags       ?? [],
   })
@@ -115,7 +116,7 @@ export function filter_event_tags (
  * @param pubkey  Public key to look for
  * @returns       True if pubkey is a recipient, false otherwise
  */
-export function is_event_recipient (
+export function is_pubkey_mentioned (
   event  : SignedEvent,
   pubkey : string
 ) {

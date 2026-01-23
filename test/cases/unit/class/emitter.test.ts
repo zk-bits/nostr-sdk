@@ -100,17 +100,19 @@ export default function emitter_tests (t: Test) {
       t.end()
     })
 
-    st.test('within - handler active during timeout', async t => {
+    st.test('within - handler fires once during timeout', async t => {
       const emitter  = new EventEmitter<TestEvents>()
       const messages: string[] = []
 
+      // within is like "once with timeout" - fires once then removes handler
       emitter.within('message', (msg) => messages.push(msg), 100)
       emitter.emit('message', 'immediate')
 
       await new Promise(r => setTimeout(r, 50))
       emitter.emit('message', 'during')
 
-      t.deepEqual(messages, ['immediate', 'during'], 'handler called during timeout')
+      // Only first event is captured, handler is removed after first call
+      t.deepEqual(messages, ['immediate'], 'handler called once during timeout')
       t.end()
     })
 
