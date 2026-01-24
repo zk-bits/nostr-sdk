@@ -9,6 +9,7 @@ A TypeScript SDK for the Nostr protocol.
 
 - **Single relay connections** - `NostrSocket` for connecting to individual relays
 - **Multi-relay aggregation** - `NostrClient` for managing multiple relay connections
+- **P2P communication** - `NostrNode` for encrypted RPC messaging between peers
 - **NIP-04 and NIP-44 encryption** - End-to-end encrypted direct messages
 - **Schnorr signatures** - secp256k1 cryptographic signing
 - **Rate-limited message queuing** - Configurable batch publishing
@@ -95,6 +96,49 @@ sub.on('event', (event) => console.log(event))
 client.close()
 ```
 
+### P2P Node
+
+```typescript
+import { NostrNode, CRYPTO } from '@vbyte/nostr-sdk'
+
+// Generate keys for two peers
+const aliceSecret = CRYPTO.gen_seckey()
+const alicePubkey = CRYPTO.get_pubkey(aliceSecret)
+const bobPubkey = '...' // Bob's public key
+
+// Create node with peer list
+const node = new NostrNode(
+  [bobPubkey],                    // Peers to communicate with
+  ['wss://relay.example.com'],    // Relay URLs
+  aliceSecret                     // Your secret key
+)
+
+// Connect and start listening
+await node.connect()
+
+// Handle incoming messages
+node.on('message', (msg) => {
+  if (msg.type === 'request') {
+    console.log(`Request from ${msg.event.pubkey}: ${msg.method}`)
+    // Respond to requests
+    node.respond(msg).accept({ result: 'ok' })
+  }
+})
+
+// Send request to a peer
+const response = await node.request(
+  { method: 'ping' },
+  bobPubkey,
+  { timeout: 5000 }
+)
+
+// Broadcast to all peers
+node.announce({ topic: 'status', data: { online: true } }, [bobPubkey])
+
+// Close node
+node.close()
+```
+
 ## API Reference
 
 ### NostrSocket
@@ -134,7 +178,7 @@ new NostrSocket(url: string, options?: Partial<NostrSocketConfig>)
 |-------|---------|-------------|
 | `ready` | `NostrSocket` | Connection established |
 | `closed` | `NostrSocket` | Connection closed |
-| `error` | `[unknown, unknown]` | Error occurred |
+| `error` | `string` | Error occurred |
 | `message` | `RelayMessage` | Relay message received |
 | `notice` | `string` | NOTICE message from relay |
 | `receipt` | `RelayReceiptMessage` | OK receipt for published event |
@@ -163,6 +207,59 @@ Same as `NostrSocket`, but operations are distributed across all relays:
 - `query(filters, duration?)` - Resolves with first relay's response
 - `subscribe(filter)` - Returns `SubscriptionManager` directly with deduplication
 - `close()` - Closes all connections
+
+### NostrNode
+
+P2P communication node for encrypted RPC messaging over Nostr.
+
+**Constructor**
+
+```typescript
+new NostrNode(
+  peers: string[],                    // Public keys of peers
+  relays: string[],                   // Relay URLs
+  seckey: string,                     // Your secret key
+  options?: Partial<NostrNodeConfig>
+)
+```
+
+**Options**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `msg_timeout` | `number` | `5000` | Request timeout (ms) |
+| `sub_timeout` | `number` | `30000` | Subscription timeout (ms) |
+| `rpc_kind` | `number` | `25000` | Event kind for RPC messages |
+
+**Properties**
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `is_ready` | `boolean` | Whether node is connected and active |
+| `client` | `NostrClient` | Underlying multi-relay client |
+| `peers` | `Set<string>` | Registered peer public keys |
+| `pubkey` | `string` | Node's public key |
+
+**Methods**
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `connect()` | `Promise<void>` | Connect and start listening |
+| `request(template, peer, options?)` | `Promise<RpcMessageData>` | Send request and wait for response |
+| `respond(request)` | `{ accept, reject }` | Create response to a request |
+| `announce(template, peers)` | `Promise<void>[]` | Broadcast event to peers |
+| `close()` | `void` | Close node and connections |
+
+**Events**
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `ready` | `NostrNode` | Node connected and active |
+| `closed` | `NostrNode` | Node closed |
+| `error` | `[string, unknown]` | Error occurred |
+| `message` | `RpcMessageData` | RPC message received |
+| `bounced` | `SignedEvent` | Event failed decryption/filtering |
+| `notice` | `string` | NOTICE from relay |
 
 ## Crypto Module
 
@@ -249,9 +346,15 @@ import type {
   // Configuration
   NostrSocketConfig,
   NostrClientConfig,
+  NostrNodeConfig,
 
   // Responses
-  PublishResponse
+  PublishResponse,
+
+  // RPC (for NostrNode)
+  RpcMessageData,
+  RequestRpcTemplate,
+  EventRpcTemplate
 } from '@vbyte/nostr-sdk'
 ```
 
@@ -283,9 +386,8 @@ npm install
 
 ### Build Outputs
 
-- `dist/main.cjs` - CommonJS
-- `dist/module.mjs` - ES Modules
-- `dist/script.js` - Browser IIFE (available via unpkg CDN)
+- `dist/` - ES Modules with TypeScript declarations
+- Organized by module: `class/`, `lib/`, `crypto/`, `schema/`, `types/`
 
 ## Resources
 
