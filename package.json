@@ -5,7 +5,7 @@
   "author": "Christopher Scott",
   "repository": {
     "type": "git",
-    "url": "https://github.com/cmdcode/nostr-sdk"
+    "url": "https://github.com/cmdruid/nostr-sdk"
   },
   "unpkg": "./dist/script.js",
   "files": [
