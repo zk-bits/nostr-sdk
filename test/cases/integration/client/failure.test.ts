@@ -153,7 +153,7 @@ export default async function client_failure_tests (t: Test) {
         urls[0] // Main relay stays up
       ])
 
-      await client.connectAll()
+      await client.connect_all()
       t.ok(client.sockets.every(s => s.is_ready), 'both connected')
 
       // Stop one relay

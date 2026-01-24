@@ -8,6 +8,7 @@ import {
 } from 'ws'
 
 import {
+  create_logger,
   generate_hash,
   parse_client_message,
   validate_relay_message,
@@ -16,7 +17,9 @@ import {
   match_any_filter
 } from '@/lib/index.js'
 
-import {
+import type { Logger } from '@/lib/logger.js'
+
+import type {
   ClientCloseMessage,
   ClientEventMessage,
   ClientRequestMessage,
@@ -49,6 +52,7 @@ export class NostrRelay extends EventEmitter<{
   private readonly _cache    : EventCache
   private readonly _config   : RelayConfig
   private readonly _filters  : Map<string, EventFilter[]> = new Map()
+  private readonly _log      : Logger
   private readonly _sessions : Map<string, ClientSession> = new Map()
   private readonly _subs     : Map<string, string>        = new Map()
 
@@ -61,6 +65,7 @@ export class NostrRelay extends EventEmitter<{
 
     this._config = { ...RELAY_CONFIG, ...options }
     this._cache  = new EventCache()
+    this._log    = create_logger('[ relay ]', this._config)
     this._subs   = new Map()
     this._wss    = null
   }
@@ -73,7 +78,7 @@ export class NostrRelay extends EventEmitter<{
     return this._config
   }
 
-  get ready () {
+  get is_ready () {
     return this._ready
   }
 
@@ -93,10 +98,7 @@ export class NostrRelay extends EventEmitter<{
   }
 
   get log () {
-    return {
-      debug : (...msg : any[]) => this.config.debug   && console.log('[ relay ]', ...msg),
-      info  : (...msg : any[]) => this.config.verbose && console.log('[ relay ]', ...msg),
-    }
+    return this._log
   }
 
   _close () {
@@ -238,18 +240,23 @@ export class NostrRelay extends EventEmitter<{
   }
 
   /** Stops the relay server and closes all connections. */
-  stop () {
+  async stop () : Promise<void> {
     // If the relay is not ready, return.
-    if (!this.ready) return
+    if (!this.is_ready) return
     // Print the stop message.
     this.log.info('relay stopping...')
-    // Close all client connections first to ensure they receive close frames.
-    for (const [ _, session ] of this.sessions) {
-      session.cleanup()
-      session.socket.close()
-    }
-    // Close the websocket server.
-    this.wss.close()
+    // Return a promise that resolves when the relay is fully closed.
+    return new Promise<void>((resolve) => {
+      // Listen for closed event to resolve the promise.
+      this.once('closed', () => resolve())
+      // Close all client connections first to ensure they receive close frames.
+      for (const [ _, session ] of this.sessions) {
+        session.cleanup()
+        session.socket.close()
+      }
+      // Close the websocket server (triggers 'close' event → _close() → 'closed' emit).
+      this.wss.close()
+    })
   }
 
   /** Registers a client subscription with the given filters. */
@@ -278,13 +285,9 @@ export class NostrRelay extends EventEmitter<{
 export class ClientSession {
 
   private readonly _id     : string
+  private readonly _log    : Logger
   private readonly _relay  : NostrRelay
   private readonly _socket : WebSocket
-
-  /** Bound handler references for proper cleanup. */
-  private readonly _onMessage : (msg: Buffer) => void
-  private readonly _onError   : (err: Error) => void
-  private readonly _onClose   : () => void
 
   constructor (
     relay     : NostrRelay,
@@ -292,17 +295,13 @@ export class ClientSession {
     socket    : WebSocket
   ) {
     this._id     = client_id
+    this._log    = create_logger(`[ session/${client_id} ]`, relay.config)
     this._relay  = relay
     this._socket = socket
 
-    // Create bound handler references for cleanup.
-    this._onMessage = (msg: Buffer) => this._handler(msg.toString())
-    this._onError   = (err: Error) => this._on_error(err)
-    this._onClose   = () => this._relay.disconnect(this.id)
-
-    this.socket.on('message', this._onMessage)
-    this.socket.on('error',   this._onError)
-    this.socket.on('close',   this._onClose)
+    this.socket.on('message', (msg: Buffer) => this._handler(msg.toString()))
+    this.socket.on('error',   (err: Error) => this._on_error(err))
+    this.socket.on('close',   () => this._relay.disconnect(this.id))
 
     this.log.info('client connected:', this.id, socket.url)
   }
@@ -317,6 +316,10 @@ export class ClientSession {
 
   get socket () {
     return this._socket
+  }
+
+  get log () {
+    return this._log
   }
 
   _handler (message : unknown) {
@@ -401,21 +404,12 @@ export class ClientSession {
     this.send(['EOSE', sub_id ])
   }
 
-  get log () {
-    return {
-      debug : (...msg : any[]) => this._relay.config.debug   && console.log(`[ session/${this.id} ]`, ...msg),
-      info  : (...msg : any[]) => this._relay.config.verbose && console.log(`[ session/${this.id} ]`, ...msg),
-    }
-  }
-
   /**
    * Removes all event listeners from the socket.
    * Call this method before closing to prevent memory leaks.
    */
   cleanup () {
-    this.socket.off('message', this._onMessage)
-    this.socket.off('error',   this._onError)
-    this.socket.off('close',   this._onClose)
+    this.socket.removeAllListeners()
   }
 
   /** Sends a message to the connected client. */

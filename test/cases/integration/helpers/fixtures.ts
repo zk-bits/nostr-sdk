@@ -242,7 +242,7 @@ export async function wait_for_relay_ready (
   relay   : NostrRelay,
   timeout : number = DEFAULT_TIMEOUT
 ): Promise<void> {
-  if (relay.ready) return
+  if (relay.is_ready) return
   await wait_for_event(relay, 'ready', timeout)
 }
 

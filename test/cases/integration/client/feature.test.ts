@@ -64,7 +64,7 @@ export default async function client_feature_tests (t: Test) {
   t.test('Client Connection', async st => {
     st.test('connects to multiple relays', async t => {
       const client = new NostrClient(urls)
-      await client.connectAll()
+      await client.connect_all()
 
       t.ok(client.sockets.some(s => s.is_ready), 'at least one socket ready')
       t.ok(client.sockets.every(s => s.is_ready), 'all sockets ready')

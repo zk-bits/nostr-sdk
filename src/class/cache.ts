@@ -3,6 +3,7 @@ import { is_event_expired } from '@/lib/event.js'
 
 import {
   get_event_cache_key,
+  match_filter,
   process_filters
 } from '@/lib/filter.js'
 
@@ -73,13 +74,16 @@ export class KeyCache {
 }
 
 /**
- * Event cache with automatic expiration pruning.
+ * Event cache with automatic expiration pruning and secondary indexes.
  * Stores events keyed by their cache key (varies by event kind).
  * Periodically removes expired events based on expiration tags.
+ * Maintains kind and pubkey indexes for O(1) lookups on common filter fields.
  */
 export class EventCache {
-  private readonly _cache : Map<string, SignedEvent>
-  private readonly _ival  : number
+  private readonly _cache     : Map<string, SignedEvent>
+  private readonly _by_kind   : Map<number, Set<string>>
+  private readonly _by_pubkey : Map<string, Set<string>>
+  private readonly _ival      : number
 
   private _timer : NodeJS.Timeout | undefined
 
@@ -88,8 +92,10 @@ export class EventCache {
    * @param prune_ival  Interval in seconds between pruning cycles (default: PRUNE_INTERVAL)
    */
   constructor (prune_ival : number = PRUNE_INTERVAL) {
-    this._cache = new Map()
-    this._ival  = prune_ival * 1000
+    this._cache     = new Map()
+    this._by_kind   = new Map()
+    this._by_pubkey = new Map()
+    this._ival      = prune_ival * 1000
     // Start the cache pruning.
     this._start()
   }
@@ -114,7 +120,7 @@ export class EventCache {
   }
 
   /**
-   * Adds an event to the cache.
+   * Adds an event to the cache and updates secondary indexes.
    * @param event  The signed event to cache
    */
   public add (event : SignedEvent) {
@@ -124,16 +130,28 @@ export class EventCache {
     if (!key) return
     // Cache the event.
     this._cache.set(key, event)
+    // Update the kind index.
+    if (!this._by_kind.has(event.kind)) {
+      this._by_kind.set(event.kind, new Set())
+    }
+    this._by_kind.get(event.kind)?.add(key)
+    // Update the pubkey index.
+    if (!this._by_pubkey.has(event.pubkey)) {
+      this._by_pubkey.set(event.pubkey, new Set())
+    }
+    this._by_pubkey.get(event.pubkey)?.add(key)
   }
 
-  /** Clears all events from the cache. */
+  /** Clears all events from the cache and secondary indexes. */
   public clear () {
-    // Clear the cache.
+    // Clear the cache and indexes.
     this._cache.clear()
+    this._by_kind.clear()
+    this._by_pubkey.clear()
   }
 
   /**
-   * Removes an event from the cache.
+   * Removes an event from the cache and secondary indexes.
    * @param event  The event to remove
    */
   public delete (event : SignedEvent) {
@@ -141,22 +159,133 @@ export class EventCache {
     const key = get_event_cache_key(event)
     // If the key is not found, return.
     if (!key) return
+    // Remove from kind index.
+    this._by_kind.get(event.kind)?.delete(key)
+    // Remove from pubkey index.
+    this._by_pubkey.get(event.pubkey)?.delete(key)
     // Delete the event from the cache.
     this._cache.delete(key)
   }
 
   /**
    * Returns events matching the given filters.
+   * Uses secondary indexes for optimized lookups on simple kind/pubkey queries.
+   * Falls back to full scan for complex queries.
    * @param filters  Event filters to match against
    * @returns        Array of matching events
    */
   public filter (filters : EventFilter[]) : SignedEvent[] {
-    // Process the filters and return the results.
-    return process_filters(this.events, filters)
+    const results : SignedEvent[] = []
+    for (const filter of filters) {
+      // Check if this is a simple indexed query (only kinds or authors, no other criteria).
+      const candidates = this._get_indexed_candidates(filter)
+      if (candidates !== null) {
+        // Use indexed candidates for faster matching.
+        for (const event of candidates) {
+          if (match_filter(event, filter)) {
+            results.push(event)
+            if (filter.limit && results.length >= filter.limit) break
+          }
+        }
+      } else {
+        // Fall back to full scan for complex queries.
+        results.push(...process_filters(this.events, [ filter ]))
+      }
+    }
+    return results
   }
 
   /**
-   * Removes expired events from the cache.
+   * Returns candidate events from indexes if the filter can use them.
+   * Returns null if no index can be used (requires full scan).
+   */
+  private _get_indexed_candidates (filter : EventFilter) : SignedEvent[] | null {
+    const { kinds, authors, ids, ...rest } = filter
+    // Check for tag filters or other criteria that require full scan.
+    const has_tag_filters = Object.keys(rest).some(k => k.startsWith('#'))
+    // If filter has tag filters, we can't use indexes alone.
+    if (has_tag_filters) return null
+    // If filter has specific IDs, use those directly from cache.
+    if (ids && ids.length > 0) {
+      const events : SignedEvent[] = []
+      for (const id of ids) {
+        const event = this._cache.get(id)
+        if (event) events.push(event)
+      }
+      return events
+    }
+    // Try to use kind index.
+    if (kinds && kinds.length > 0 && (!authors || authors.length === 0)) {
+      const events : SignedEvent[] = []
+      for (const kind of kinds) {
+        const keys = this._by_kind.get(kind)
+        if (keys) {
+          for (const key of keys) {
+            const event = this._cache.get(key)
+            if (event) events.push(event)
+          }
+        }
+      }
+      return events
+    }
+    // Try to use pubkey index.
+    if (authors && authors.length > 0 && (!kinds || kinds.length === 0)) {
+      const events : SignedEvent[] = []
+      for (const pubkey of authors) {
+        const keys = this._by_pubkey.get(pubkey)
+        if (keys) {
+          for (const key of keys) {
+            const event = this._cache.get(key)
+            if (event) events.push(event)
+          }
+        }
+      }
+      return events
+    }
+    // If both kinds and authors are specified, use the smaller set.
+    if (kinds && kinds.length > 0 && authors && authors.length > 0) {
+      // Estimate sizes.
+      let kind_count = 0
+      for (const kind of kinds) {
+        kind_count += this._by_kind.get(kind)?.size ?? 0
+      }
+      let pubkey_count = 0
+      for (const pubkey of authors) {
+        pubkey_count += this._by_pubkey.get(pubkey)?.size ?? 0
+      }
+      // Use smaller index.
+      if (kind_count <= pubkey_count) {
+        const events : SignedEvent[] = []
+        for (const kind of kinds) {
+          const keys = this._by_kind.get(kind)
+          if (keys) {
+            for (const key of keys) {
+              const event = this._cache.get(key)
+              if (event) events.push(event)
+            }
+          }
+        }
+        return events
+      } else {
+        const events : SignedEvent[] = []
+        for (const pubkey of authors) {
+          const keys = this._by_pubkey.get(pubkey)
+          if (keys) {
+            for (const key of keys) {
+              const event = this._cache.get(key)
+              if (event) events.push(event)
+            }
+          }
+        }
+        return events
+      }
+    }
+    // No index can be used.
+    return null
+  }
+
+  /**
+   * Removes expired events from the cache and secondary indexes.
    * @param stamp  Optional timestamp to use as current time (default: now)
    */
   public prune (stamp? : number) : void {
@@ -164,6 +293,10 @@ export class EventCache {
     for (const [ key, event ] of this.cache) {
       // If the event is expired,
       if (is_event_expired(event, stamp)) {
+        // Remove from kind index.
+        this._by_kind.get(event.kind)?.delete(key)
+        // Remove from pubkey index.
+        this._by_pubkey.get(event.pubkey)?.delete(key)
         // Delete the event from the cache.
         this._cache.delete(key)
       }

@@ -30,6 +30,7 @@ import {
   validate_event_template,
   validate_request_message,
   validate_request_template,
+  wait_for_ready,
   wrap_rpc_message
 } from '@/lib/index.js'
 
@@ -147,9 +148,11 @@ export class NostrNode extends EventEmitter<{
 
   private _close () {
     // Clear the timer if it exists.
-    if (this._timer) {
-      clearTimeout(this._timer)
-      this._timer = undefined
+    clearTimeout(this._timer)
+    // Cancel the subscription before closing client.
+    if (this._sub) {
+      this._sub.cancel()
+      this._sub = null
     }
     // Clear the peers map.
     this._peers.clear()
@@ -314,40 +317,27 @@ export class NostrNode extends EventEmitter<{
   }
 
   /** Connects to relays and starts listening for messages. */
-  public connect () : Promise<void> {
-    // If the node is already ready, return a resolved promise.
-    if (this.is_ready) return Promise.resolve()
-    // If already connecting, wait for ready event instead of starting new connection.
-    if (this._connecting) {
-      return new Promise((resolve, reject) => {
-        const cleanup = () => { clearTimeout(timer); this.off('error', on_err) }
-        const on_err  = (err : unknown) => { cleanup(); reject(err) }
-        const timer = setTimeout(() => { cleanup(); reject(new Error('connection timed out')) }, this.config.msg_timeout)
-        this.once('ready', () => { cleanup(); resolve() })
-        this.on('error', on_err)
-      })
+  public async connect () : Promise<void> {
+    // If the node is already ready, return.
+    if (this.is_ready) return
+    // Wait for connection (whether first attempt or joining existing).
+    const was_connecting = this._connecting
+    if (!was_connecting) {
+      this._connecting = true
+      // Start the subscription process (only for first caller).
+      this._subscribe().catch(() => {})
     }
-    // Mark as connecting.
-    this._connecting = true
-    // Otherwise, return a promise that resolves when the node is ready.
-    return new Promise((resolve, reject) => {
-      // Cleanup function to clear timeout and remove error listener.
-      const cleanup = () => {
-        clearTimeout(timer)
-        this.off('error', on_err)
-        this._connecting = false
-      }
-      // Error handler function.
-      const on_err  = (err : unknown) => { cleanup(); reject(err) }
-      // Set a timeout to reject the promise if the request times out.
-      const timer = setTimeout(() => { cleanup(); reject(new Error('connection timed out')) }, this.config.msg_timeout)
-      // Subscribe to the ready event.
-      this.once('ready', () => { cleanup(); resolve() })
-      // Subscribe to the error event.
-      this.on('error', on_err)
-      // Subscribe to the subscription event.
-      this._subscribe().catch(on_err)
-    })
+    try {
+      await wait_for_ready(this, {
+        timeout     : this.config.msg_timeout,
+        ready_event : 'ready',
+        error_event : 'error',
+        timeout_msg : 'connection timed out',
+        error_msg   : (err) => String(err),
+      })
+    } finally {
+      if (!was_connecting) this._connecting = false
+    }
   }
 
   /** Broadcasts an event message to peers without waiting for responses. */

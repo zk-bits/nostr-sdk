@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## [1.0.1]
+
+### Fixed
+- Race condition in `NostrSubscription` keep-alive timer that could fire after cancellation
+- Events from relays are now validated (signature verification) before being emitted
+
+### Changed
+- `EventCache` now uses secondary indexes for `kind` and `pubkey` fields, improving filter performance from O(n*m) to O(k) for simple queries
+
+### Documentation
+- Added entropy warning to `gen_seckey()` for optional seed parameter
+
 ## [1.0.0]
 
 ### Added

@@ -123,9 +123,12 @@ export class NostrClient extends EventEmitter <{
     return this._subs
   }
 
-  /** Closes all relay connections. */
+  /** Closes all relay connections and cancels all subscriptions. */
   public close () {
-    // Close all sockets.
+    // Cancel all subscription managers first.
+    this._subs.forEach(sub => void sub.cancel())
+    this._subs.clear()
+    // Then close all sockets.
     this.sockets.forEach(socket => void socket.close())
   }
 
@@ -151,7 +154,7 @@ export class NostrClient extends EventEmitter <{
    * @returns  Promise that resolves when all relays connect
    * @throws   Error if any relay fails to connect
    */
-  public async connectAll () : Promise<void> {
+  public async connect_all () : Promise<void> {
     // Create connection promises for all sockets.
     const promises = this.sockets.map(socket => socket.connect())
     // Wait for all connections to complete.

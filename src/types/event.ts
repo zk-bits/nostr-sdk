@@ -1,11 +1,11 @@
 /** Filter criteria for querying events from relays. */
 export interface EventFilter {
-  ids     ?: string[]
-  authors ?: string[]
-  kinds   ?: number[]
-  since   ?: number
-  until   ?: number
-  limit   ?: number
+  ids?     : string[]
+  authors? : string[]
+  kinds?   : number[]
+  since?   : number
+  until?   : number
+  limit?   : number
   [ key : string ] : string[] | string | number | number[] | undefined
 }
 

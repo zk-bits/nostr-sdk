@@ -1,26 +1,77 @@
 # Code Conventions
 
-This document defines coding conventions for `@vbyte/nostr-sdk`.
+Coding conventions for `@vbyte/nostr-sdk`.
 
-## Quick Reference
+## Naming
 
 | Context | Convention | Examples |
 |---------|------------|----------|
-| Files | `lowercase.ts` | `socket.ts`, `emitter.ts`, `event.ts` |
+| Files | `lowercase.ts` | `socket.ts`, `emitter.ts` |
 | Library functions | `snake_case` | `create_event()`, `parse_content()` |
-| Class public methods | `camelCase` | `connect()`, `publish()`, `subscribe()` |
+| Class methods | `snake_case` | `connect()`, `publish()` |
 | Private fields | `_snake_case` | `_config`, `_queue`, `_init` |
+| Public getters | `is_snake_case` | `is_ready`, `is_closed` |
 | Config properties | `snake_case` | `max_retries`, `msg_timeout` |
 | Constants | `UPPER_SNAKE_CASE` | `SOCKET_CONFIG` |
 | Types/Interfaces | `PascalCase` | `SignedEvent`, `EventFilter` |
 | Zod schemas | `lowercase` | `num`, `hex`, `str`, `stamp` |
 
-## Import Organization
+## Formatting
+
+### Vertical Alignment
+
+Align colons in interfaces, objects, parameters, and declarations:
+
+```typescript
+// Interface properties
+export interface NostrSocketConfig {
+  max_retries : number
+  queue_ival  : number
+  queue_limit : number
+  msg_timeout : number
+}
+
+// Object literals
+const config = {
+  max_retries : 3,
+  msg_timeout : 5000
+}
+
+// Arrays
+const items = [ 'apple', 'banana', 'grapes' ]
+
+const planets = [
+  'earth',
+  'mars',
+  'jupiter'
+]
+
+// Function parameters
+export function sign_event (
+  template : EventTemplate,
+  seckey   : string
+) : SignedEvent
+
+// Variable declarations
+private readonly _config : NostrSocketConfig
+private readonly _queue  : MessageQueue
+private readonly _subs   : Map<string, NostrSubscription> = new Map()
+```
+
+### General Rules
+
+- 2-space indentation (no tabs)
+- Spaces around operators
+- Space before and after colon in type annotations
+- No semicolons (unless required)
+- Trailing commas in multiline structures
+
+## Imports
 
 ```typescript
 // 1. Class imports (internal)
-import { EventEmitter }      from '@/class/emitter.js'
-import { MessageQueue }      from '@/class/queue.js'
+import { EventEmitter } from '@/class/emitter.js'
+import { MessageQueue } from '@/class/queue.js'
 
 // 2. Library imports
 import {
@@ -28,7 +79,7 @@ import {
   validate_client_message
 } from '@/lib/index.js'
 
-// 3. Type imports (separate block with `type` keyword)
+// 3. Type imports (separate block)
 import type {
   ClientMessage,
   EventFilter,
@@ -39,14 +90,10 @@ import type {
 import * as Schema from '@/schema/index.js'
 ```
 
-**Rules:**
 - Use `@/` path alias with `.js` extension
-- Vertical alignment on `from` keyword
 - Type imports in separate block using `import type`
 
 ## Class Structure
-
-Standard class anatomy:
 
 ```typescript
 export class NostrSocket extends EventEmitter<NostrSocketEvent> {
@@ -55,10 +102,10 @@ export class NostrSocket extends EventEmitter<NostrSocketEvent> {
   private readonly _queue  : MessageQueue
 
   // 2. Private mutable fields
-  private _init  : boolean = false
-  private _timer : NodeJS.Timeout | undefined
+  private _closed : boolean = false
+  private _init   : boolean = false
 
-  // 3. Constructor with config merging
+  // 3. Constructor
   constructor (
     host_url : string,
     options  : Partial<NostrSocketConfig> = {}
@@ -67,25 +114,25 @@ export class NostrSocket extends EventEmitter<NostrSocketEvent> {
     this._config = { ...SOCKET_CONFIG, ...options }
   }
 
-  // 4. Public getters
-  get config () { return this._config }
+  // 4. Private methods
+  private _attach_listeners () { /* ... */ }
+
+  // 5. Public getters
+  get config ()   { return this._config }
   get is_ready () { return this._init }
 
-  // 5. Private methods (underscore prefix)
-  private _close () { /* ... */ }
-  private _handler (message : unknown) { /* ... */ }
+  // 6. Private event handlers
+  private _on_close () { /* ... */ }
 
-  // 6. Public methods (camelCase)
-  public close (delay : number = 100) { /* ... */ }
+  // 7. Public methods
+  public close () { /* ... */ }
   public async connect () : Promise<void> { /* ... */ }
 }
 ```
 
-## Type Patterns
+## Types
 
 ### Result<T>
-
-Safe error handling via discriminated union:
 
 ```typescript
 export type Result<T = any> = OkResult<T> | ErrorResult
@@ -101,55 +148,55 @@ export interface ErrorResult {
 }
 ```
 
-Usage:
-```typescript
-if (!parsed.ok) return this.emit('reject', message, 'invalid')
-this.emit('message', parsed.result)
-```
-
-### Interfaces
-
-Vertical alignment on colons:
+### Event Maps
 
 ```typescript
-export interface NostrSocketConfig {
-  max_retries : number
-  queue_ival  : number
-  queue_limit : number
-  msg_timeout : number
-  sub_timeout : number
+// Inline definition
+export class NostrClient extends EventEmitter<{
+  closed : [ NostrSocket ],
+  ready  : [ NostrSocket ],
+  error  : [ string, NostrSocket ]
+}> {
+
+// Or separate interface
+export interface NostrSocketEvent {
+  ready   : [ NostrSocket ]
+  closed  : [ NostrSocket ]
+  error   : [ string ]
+  message : [ RelayMessage ]
 }
 ```
 
-## Assertion Functions
-
-Type guard assertions in `src/lib/assert.ts`:
+### Generic Patterns
 
 ```typescript
-export function assert_ok (
-  value    : unknown,
-  message? : string
-) : asserts value {
-  if (value === false) {
-    throw new Error(message ?? 'Assertion failed!')
-  }
+// Class with constraint
+export class EventEmitter<T extends Record<string, any[]> = {}> {
+  public on <K extends keyof T> (
+    eventName : K,
+    handler   : (...args: T[K]) => void
+  ) : void
 }
 
-export function assert_exists<T> (
-  value    : T | undefined | null,
-  message? : string
-) : asserts value is NonNullable<T> {
-  if (typeof value === 'undefined' || value === null) {
-    throw new Error(message ?? 'Value is null or undefined!')
-  }
+// Function with generic
+export function exec <T = any> (fn : () => T) : Result<T>
+```
+
+## Config Defaults
+
+```typescript
+export const SOCKET_CONFIG : NostrSocketConfig = {
+  max_retries : 3,
+  queue_ival  : 500,
+  queue_limit : 10,
+  msg_timeout : 5000
 }
+
+// Merge in constructor
+this._config = { ...SOCKET_CONFIG, ...options }
 ```
 
 ## Zod Schemas
-
-### Base Types
-
-Short lowercase names with refinement chaining:
 
 ```typescript
 export const num = z.number()
@@ -158,110 +205,41 @@ export const num = z.number()
 
 export const int   = num.int()
 export const stamp = int.min(500_000_000)
-
-export const hex = z.string()
-  .regex(/^[0-9a-fA-F]*$/)
-  .refine(e => e.length % 2 === 0)
-
+export const hex   = z.string().regex(/^[0-9a-fA-F]*$/)
 export const hex32 = hex.refine((e) => e.length === 64)
 ```
 
-### Schema Validation
+## JSDoc
 
 ```typescript
-const parsed = Schema.EVENT.signed.safeParse(event)
-if (!parsed.success) {
-  return 'note failed schema validation'
-}
+/**
+ * Brief description of the class or method.
+ * @param relay    WebSocket URL or existing WebSocket instance
+ * @param options  Optional configuration overrides
+ * @returns        Promise that resolves with the result
+ * @throws Error   If validation fails
+ */
 ```
 
-## Config Defaults
-
-Spread merging pattern:
-
-```typescript
-export const SOCKET_CONFIG : NostrSocketConfig = {
-  max_retries : 3,
-  queue_ival  : 500,
-  queue_limit : 10,
-  msg_timeout : 5000,
-  sub_timeout : 30000
-}
-
-// In constructor
-this._config = { ...SOCKET_CONFIG, ...options }
-```
-
-## Formatting Rules
-
-### Vertical Alignment
-
-Align colons in:
-- Interface properties
-- Object literals
-- Function parameters
-- Variable declarations
-
-```typescript
-// Interface
-export interface EventFilter {
-  ids     : string[]
-  authors : string[]
-  kinds   : number[]
-}
-
-// Object literal
-const config = {
-  max_retries : 3,
-  msg_timeout : 5000
-}
-
-// Function parameters
-export function sign_event (
-  template : EventTemplate,
-  seckey   : string
-) : SignedEvent
-```
-
-### General Rules
-
-- 2-space indentation (no tabs)
-- Spaces around operators
-- Space before and after colon in type annotations
-- No semicolons (unless required)
-- Trailing commas in multiline structures
-
-### Biome Configuration
-
-From `biome.json`:
-- **Formatter**: Disabled (manual formatting)
-- **Linter**: Enabled
-- **Unused imports/variables**: Error
-- **`noExplicitAny`**: Off (allowed when necessary)
-- **`noBannedTypes`**: Off
+Inline comments: single-line, action-oriented, explain **why** not what.
 
 ## Module Organization
 
 ```
 src/
-├── class/       # Core classes (NostrSocket, NostrClient, EventEmitter)
+├── class/       # Core classes
 ├── crypto/      # Cryptographic operations
-├── lib/         # Library functions (event, parse, assert)
+├── lib/         # Library functions
 ├── schema/      # Zod validation schemas
 └── types/       # TypeScript type definitions
 ```
 
-### Index Files
+Index files use flat re-exports (`export * from`) for implementations, namespace exports (`export * as`) for schemas.
 
-- Flat re-exports for implementation modules
-- Namespace exports for schemas
+## Biome
 
-```typescript
-// lib/index.ts
-export * from './event.js'
-export * from './parse.js'
-
-// schema/index.ts
-export * as EVENT from './event.js'
-export * as BASE  from './base.js'
-```
+- Formatter: Disabled (manual formatting)
+- Linter: Enabled
+- Unused imports/variables: Error
+- `noExplicitAny`: Off
+- `noBannedTypes`: Off

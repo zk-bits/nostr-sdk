@@ -7,13 +7,12 @@ A TypeScript SDK for the Nostr protocol.
 
 ## Features
 
-- **Single relay connections** - `NostrSocket` for connecting to individual relays
-- **Multi-relay aggregation** - `NostrClient` for managing multiple relay connections
-- **P2P communication** - `NostrNode` for encrypted RPC messaging between peers
-- **NIP-04 and NIP-44 encryption** - End-to-end encrypted direct messages
-- **Schnorr signatures** - secp256k1 cryptographic signing
-- **Rate-limited message queuing** - Configurable batch publishing
-- **Event deduplication** - O(1) cache for filtering duplicate events
+- **Single relay connections** - `NostrSocket` for connecting to individual relays.
+- **Multi-relay aggregation** - `NostrClient` for managing multiple relay connections.
+- **Peer-to-peer communication** - `NostrNode` for encrypted RPC messaging between peers.
+- **Health monitoring and keep-alive** - For socket connections and subscriptions.
+- **Rate-limited message queuing** - Prevents spamming nodes with events (and getting banned from the relay).
+- **Event de-duplication** - O(1) cache for filtering duplicate events from multiple subscriptions.
 - **TypeScript-first** - Full type definitions included
 - **Zod schema validation** - Runtime validation for events and messages
 

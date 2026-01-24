@@ -97,7 +97,7 @@ export default async function relay_failure_tests (t: Test) {
       await wait_ms(200)
 
       t.ok(relay.sessions.size < initialSessions, 'session removed after disconnect')
-      t.ok(relay.ready, 'relay still ready after client disconnect')
+      t.ok(relay.is_ready, 'relay still ready after client disconnect')
       t.end()
     })
 
@@ -110,7 +110,7 @@ export default async function relay_failure_tests (t: Test) {
       }
       await wait_ms(200)
 
-      t.ok(relay.ready, 'relay survives rapid connect/disconnect cycles')
+      t.ok(relay.is_ready, 'relay survives rapid connect/disconnect cycles')
       t.end()
     })
 
@@ -125,7 +125,7 @@ export default async function relay_failure_tests (t: Test) {
       socket.close()
       await wait_ms(200)
 
-      t.ok(relay.ready, 'relay handles mid-subscription close')
+      t.ok(relay.is_ready, 'relay handles mid-subscription close')
       t.end()
     })
 

@@ -5,7 +5,13 @@ import { schnorr }   from '@noble/curves/secp256k1.js'
 
 /**
  * Generates a new secret key for use with secp256k1.
- * @param secret   Optional seed value to generate deterministic key
+ *
+ * @param secret   Optional seed value to generate deterministic key.
+ *                 WARNING: If provided, must contain at least 128 bits of
+ *                 cryptographically random entropy. Low-entropy seeds
+ *                 (passwords, timestamps, predictable data) produce insecure
+ *                 keys vulnerable to brute-force attacks. When in doubt,
+ *                 omit this parameter for secure random generation.
  * @returns        Secret key in hex format
  */
 export function gen_seckey (

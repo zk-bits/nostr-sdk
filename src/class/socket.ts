@@ -4,7 +4,9 @@ import { NostrSubscription } from '@/class/sub.js'
 
 import {
   parse_relay_message,
-  validate_client_message
+  validate_client_message,
+  verify_event,
+  wait_for_ready
 } from '@/lib/index.js'
 
 import type {
@@ -32,13 +34,6 @@ export const SOCKET_CONFIG : NostrSocketConfig = {
 /**
  * WebSocket connection to a single Nostr relay.
  * Handles message parsing, event publishing, and subscription management.
- * @emits ready    When the WebSocket connection is established
- * @emits closed   When the WebSocket connection is closed
- * @emits error    When a WebSocket error occurs
- * @emits message  When a valid relay message is received
- * @emits notice   When a NOTICE message is received from the relay
- * @emits receipt  When an OK receipt is received for a published event
- * @emits reject   When an invalid message is received
  */
 export class NostrSocket extends EventEmitter <NostrSocketEvent> {
   private readonly _config : NostrSocketConfig
@@ -46,10 +41,13 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
   private readonly _subs   : Map<string, NostrSubscription> = new Map()
   private readonly _url    : string
 
+  private _closed      : boolean = false
   private _closeTimer  : NodeJS.Timeout | undefined
-  private _connecting  : boolean = false
   private _init        : boolean = false
-  private _ws          : WebSocket
+  private _ws          : WebSocket | null
+
+  /** Bound listener references for proper cleanup. */
+  private readonly _handlers : Map<string, EventListener> = new Map()
 
   /**
    * Creates a new NostrSocket connection to a relay.
@@ -74,20 +72,47 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
         throw new Error(`invalid WebSocket URL: ${relay}`)
       }
       this._url = relay
-      this._ws  = new WebSocket(relay)
+      this._ws  = null  // Defer connection until connect() is called
     } else {
       // Use provided WebSocket directly.
       this._url = relay.url
       this._ws  = relay
+      // Attach listeners to the provided WebSocket.
+      this._attach_listeners()
     }
-    // Register an event listener for the open event.
-    this.ws.addEventListener('open', () => this._open())
-    // Register an event listener for the close event.
-    this.ws.addEventListener('close', () => this._close())
-    // Register an event listener for the error event.
-    this.ws.addEventListener('error', (event) => this._error(event))
-    // Register an event listener for the message event.
-    this.ws.addEventListener('message', (event) => this._handler(event.data))
+  }
+
+  /**
+   * Attaches event listeners to the WebSocket.
+   * Stores references for cleanup.
+   */
+  private _attach_listeners () {
+    if (!this._ws) return
+    const ws = this._ws
+    // Define handlers as tuples for iteration.
+    const handlers : [ string, EventListener ][] = [
+      [ 'open',    () => this._open() ],
+      [ 'close',   () => this._close() ],
+      [ 'error',   (e : Event) => this._on_error(e) ],
+      [ 'message', (e : Event) => this._on_message((e as MessageEvent).data) ],
+    ]
+    // Attach all handlers.
+    for (const [ event, handler ] of handlers) {
+      this._handlers.set(event, handler)
+      ws.addEventListener(event, handler)
+    }
+  }
+
+  /**
+   * Removes event listeners from the WebSocket.
+   */
+  private _remove_listeners () {
+    if (!this._ws) return
+    // Remove all handlers.
+    for (const [ event, handler ] of this._handlers) {
+      this._ws.removeEventListener(event, handler)
+    }
+    this._handlers.clear()
   }
 
   /** Current socket configuration. */
@@ -112,6 +137,9 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
 
   /** The underlying WebSocket instance. */
   get ws () {
+    if (!this._ws) {
+      throw new Error(`WebSocket not initialized for ${this.url}`)
+    }
     return this._ws
   }
 
@@ -124,26 +152,34 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
     this._subs.forEach(sub => void sub.cancel())
     // Clear the subscriptions map.
     this._subs.clear()
+    // Remove event listeners from the WebSocket.
+    this._remove_listeners()
     // Set the socket to not initialized.
     this._init = false
-    // Clear the connecting flag.
-    this._connecting = false
     // Emit a closed event.
     this.emit('closed', this)
   }
 
-  private _error (error : unknown) {
+  private _on_error (error : unknown) {
     // Emit an error event.
     this.emit('error', String(error))
   }
 
-  private _event (msg : RelayEventMessage) {
-    // Emit an event event.
+  private _on_event (msg : RelayEventMessage) {
+    // Extract the event from the message.
+    const event = msg[2]
+    // Verify the event signature and integrity.
+    const error = verify_event(event)
+    // If validation fails, emit reject and return early.
+    if (error !== null) {
+      return this.emit('reject', event, error)
+    }
+    // Emit the validated event.
     this.emit('event', msg)
   }
 
   // Handle websocket messages from the relay.
-  private _handler (message : unknown) {
+  private _on_message (message : unknown) {
     // Parse the message.
     try {
       // Parse the relay message.
@@ -154,19 +190,24 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
       this.emit('message', parsed.result)
       // Handle the message.
       switch (parsed.result[0]) {
-        case 'EVENT'  : this._event(parsed.result);   break
-        case 'NOTICE' : this._notice(parsed.result);  break
-        case 'OK'     : this._receipt(parsed.result); break
+        case 'EVENT'  : this._on_event(parsed.result);   break
+        case 'NOTICE' : this._on_notice(parsed.result);  break
+        case 'OK'     : this._on_receipt(parsed.result); break
       }
     } catch (err : unknown) {
       // Handle the error.
-      this._error(err)
+      this._on_error(err)
     }
   }
 
-  private _notice (msg : RelayNoticeMessage) {
+  private _on_notice (msg : RelayNoticeMessage) {
     // Emit a notice event.
     this.emit('notice', msg[1])
+  }
+
+  private _on_receipt (msg : RelayReceiptMessage) {
+    // Emit a receipt event.
+    this.emit('receipt', msg)
   }
 
   private _open () {
@@ -176,11 +217,6 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
     this._init = true
     // Emit a ready event.
     this.emit('ready', this)
-  }
-
-  private _receipt (msg : RelayReceiptMessage) {
-    // Emit a receipt event.
-    this.emit('receipt', msg)
   }
 
   public _send (msg : ClientMessage) {
@@ -199,12 +235,13 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
     clearTimeout(this._closeTimer)
     // Mark socket as closed immediately so new operations fail.
     this._init = false
+    // Mark socket as permanently closed to prevent reconnection.
+    this._closed = true
     // Setup a timer to close the connection.
     this._closeTimer = setTimeout(() => {
-      // If the websocket connection is open,
-      if (this.ws.readyState === WebSocket.OPEN) {
-        // Close the websocket connection.
-        this.ws.close()
+      // If the websocket exists and is open, close it.
+      if (this._ws && this._ws.readyState === WebSocket.OPEN) {
+        this._ws.close()
       }
     }, delay)
     // Don't block process exit while waiting to close.
@@ -214,44 +251,25 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
   /**
    * Waits for the WebSocket connection to be established.
    * @returns  Promise that resolves when connected
-   * @throws   Error if connection times out
+   * @throws   Error if connection times out, fails, or socket is closed
    */
   public async connect () : Promise<void> {
-    // If the socket is already connected, return.
+    // Reject if socket was explicitly closed.
+    if (this._closed) throw new Error(`socket is closed for ${this.url}`)
+    // Return early if already connected.
     if (this.is_ready) return
-    // If the socket is closing or closed, reject immediately.
-    const state = this.ws.readyState
-    if (state === WebSocket.CLOSING || state === WebSocket.CLOSED) {
-      throw new Error(`socket is closed for ${this.url}`)
+    // Create WebSocket on demand if not initialized or if closed/closing.
+    if (!this._ws || this._ws.readyState >= WebSocket.CLOSING) {
+      this._ws = new WebSocket(this._url)
+      this._attach_listeners()
     }
-    // If already connecting, wait for ready event instead of starting new connection.
-    if (this._connecting) {
-      return new Promise((resolve, reject) => {
-        const timeout = this.config.msg_timeout
-        const timer = setTimeout(() => reject(new Error(`connection timeout for ${this.url}`)), timeout)
-        this.within('ready', () => { clearTimeout(timer); resolve() }, timeout)
-      })
-    }
-    // Mark as connecting.
-    this._connecting = true
-    // Define the connection timeout.
-    const timeout = this.config.msg_timeout
-    // Create a promise to resolve the connection.
-    return new Promise((resolve, reject) => {
-      // Set a timeout to reject the promise if the connection times out.
-      const timer = setTimeout(() => {
-        this._connecting = false
-        reject(new Error(`connection timeout for ${this.url}`))
-      }, timeout)
-      // Connect the socket.
-      this.within('ready', () => {
-        // Clear the timeout.
-        clearTimeout(timer)
-        // Clear connecting flag.
-        this._connecting = false
-        // Resolve the promise.
-        resolve()
-      }, timeout)
+    // Wait for 'ready' event (multiple callers share the same wait).
+    await wait_for_ready(this, {
+      timeout     : this.config.msg_timeout,
+      ready_event : 'ready',
+      error_event : 'error',
+      timeout_msg : `connection timeout for ${this.url}`,
+      error_msg   : (err) => `connection failed for ${this.url}: ${err}`,
     })
   }
 
@@ -262,45 +280,33 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
    * @throws       Error if publish times out or is rejected by the relay
    */
   public async publish (event : SignedEvent) : Promise<PublishResponse> {
-    // Make sure the socket is connected.
     await this.connect()
-    // Define the relay URL.
-    const relay = this.url
-    // Define the timeout.
+    const relay   = this.url
     const timeout = this.config.msg_timeout
-    // Create a promise to resolve the publish result.
     return new Promise((resolve, reject) => {
-      // Track whether promise has been settled to prevent double resolution.
+      // Guard against race between receipt and timeout.
       let settled = false
-      // Cleanup function to remove handler.
-      const cleanup = () => { this.off('receipt', handler) }
-      // Set a timeout to reject the promise if the request times out.
+      // Handle receipt messages from the relay.
+      const handler = (msg : RelayReceiptMessage) => {
+        const [ _, event_id, ok, reason ] = msg
+        // Ignore receipts for other events.
+        if (event_id !== event.id) return
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        this.off('receipt', handler)
+        if (ok) resolve({ ok : true, event_id, relay })
+        else reject({ ok : false, event_id, relay, reason })
+      }
+      // Timeout rejects if relay doesn't respond.
       const timer = setTimeout(() => {
         if (settled) return
         settled = true
-        cleanup()
+        this.off('receipt', handler)
         reject(new Error(`publish timeout for ${this.url}`))
       }, timeout)
-      // Handler for receipt events.
-      const handler = (msg : RelayReceiptMessage) => {
-        // Unpack the receipt message.
-        const [ _, event_id, ok, reason ] = msg
-        // If the event ID matches, resolve the promise.
-        if (event_id === event.id) {
-          if (settled) return
-          settled = true
-          // Clear the timeout.
-          clearTimeout(timer)
-          // Remove the handler.
-          cleanup()
-          if (ok) resolve({ ok : true, event_id, relay })
-          // If the publish failed, reject the promise.
-          else reject({ ok : false, event_id, relay, reason })
-        }
-      }
-      // Subscribe to the receipt event.
+      // Start listening for receipt, then send event.
       this.on('receipt', handler)
-      // Publish the event to the relay.
       this.send([ 'EVENT', event ])
     })
   }
@@ -320,13 +326,14 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
     await this.connect()
     // Create a new subscription.
     const sub = new NostrSubscription(filters, this)
-    // Return the promise with the results.
-    return sub.listen(options).then((events) => {
-      // Unsubscribe from the subscription.
-      sub.cancel()
-      // Resolve the promise with the events.
+    // Use try/finally to ensure cleanup on both success and error.
+    try {
+      const events = await sub.listen(options)
       return events
-    })
+    } finally {
+      // Always cancel the subscription to clean up resources.
+      sub.cancel()
+    }
   }
 
   /**

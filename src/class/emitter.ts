@@ -4,13 +4,13 @@
  * @template T Record of event names mapped to their payload types (array of parameters)
  */
 export class EventEmitter<T extends Record<string, any[]> = {}> {
-  private readonly eventMap: Map<keyof T | '*', Set<Function>>
+  private readonly _event_map   : Map<keyof T | '*', Set<Function>>
   /** Maps original handlers to their wrapper functions for once() cleanup. */
-  private readonly wrapperMap: WeakMap<Function, Function>
+  private readonly _wrapper_map : WeakMap<Function, Function>
 
   constructor() {
-    this.eventMap = new Map()
-    this.wrapperMap = new WeakMap()
+    this._event_map   = new Map()
+    this._wrapper_map = new WeakMap()
   }
 
   /**
@@ -19,11 +19,11 @@ export class EventEmitter<T extends Record<string, any[]> = {}> {
    * @param eventName  Name of the event to get handlers for
    * @returns          Set of handler functions for the event
    */
-  private getEventHandlers(eventName: string): Set<Function> {
-    const handlers = this.eventMap.get(eventName)
+  private _get_event_handlers (eventName : string) : Set<Function> {
+    const handlers = this._event_map.get(eventName)
     if (!handlers) {
       const newHandlers = new Set<Function>()
-      this.eventMap.set(eventName, newHandlers)
+      this._event_map.set(eventName, newHandlers)
       return newHandlers
     }
     return handlers
@@ -35,7 +35,7 @@ export class EventEmitter<T extends Record<string, any[]> = {}> {
    * @returns         True if the event has subscribers, false otherwise
    */
   public has <K extends keyof T> (eventName : K) : boolean {
-    const handlers = this.eventMap.get(eventName)
+    const handlers = this._event_map.get(eventName)
     return handlers !== undefined && handlers.size > 0
   }
 
@@ -46,7 +46,7 @@ export class EventEmitter<T extends Record<string, any[]> = {}> {
   public all <K extends keyof T> (
     handler : (topic : keyof T, ...args: T[K]) => void | Promise<void>
   ) : void {
-    this.getEventHandlers('*').add(handler)
+    this._get_event_handlers('*').add(handler)
   }
 
   /**
@@ -59,7 +59,7 @@ export class EventEmitter<T extends Record<string, any[]> = {}> {
     eventName : K,
     handler   : (...args: T[K]) => void | Promise<void>
   ): void {
-    this.getEventHandlers(eventName as string).add(handler)
+    this._get_event_handlers(eventName as string).add(handler)
   }
 
   /**
@@ -73,12 +73,12 @@ export class EventEmitter<T extends Record<string, any[]> = {}> {
     handler   : (...args: T[K]) => void | Promise<void>
   ): void {
     const oneTimeHandler = (...args: T[K]): void => {
-      this.wrapperMap.delete(handler)
+      this._wrapper_map.delete(handler)
       this.off(eventName, oneTimeHandler)
       void handler(...args)
     }
     // Store mapping so off() can remove the wrapper using the original handler
-    this.wrapperMap.set(handler, oneTimeHandler)
+    this._wrapper_map.set(handler, oneTimeHandler)
     this.on(eventName, oneTimeHandler)
   }
 
@@ -107,7 +107,7 @@ export class EventEmitter<T extends Record<string, any[]> = {}> {
     const timer = setTimeout(cleanup, timeoutMs)
     if (typeof timer.unref === 'function') timer.unref()
 
-    this.wrapperMap.set(handler, wrappedHandler)
+    this._wrapper_map.set(handler, wrappedHandler)
     this.on(eventName, wrappedHandler)
   }
 
@@ -125,7 +125,7 @@ export class EventEmitter<T extends Record<string, any[]> = {}> {
     const promises: Promise<any>[] = []
 
     // Call wildcard handlers
-    this.getEventHandlers('*').forEach(handler => {
+    this._get_event_handlers('*').forEach(handler => {
       const result = handler(eventName, ...args)
       if (result instanceof Promise) {
         promises.push(result)
@@ -133,7 +133,7 @@ export class EventEmitter<T extends Record<string, any[]> = {}> {
     })
 
     // Call specific event handlers
-    this.getEventHandlers(eventName as string).forEach(handler => {
+    this._get_event_handlers(eventName as string).forEach(handler => {
       const result = handler(...args)
       if (result instanceof Promise) {
         promises.push(result)
@@ -152,16 +152,28 @@ export class EventEmitter<T extends Record<string, any[]> = {}> {
     eventName : K,
     handler   : (...args: T[K]) => void | Promise<void>
   ) : void {
-    const handlers = this.eventMap.get(eventName)
+    const handlers = this._event_map.get(eventName)
     // If no handlers exist for this event, nothing to remove.
     if (!handlers) return
     // Try to remove the handler directly.
     if (handlers.delete(handler)) return
     // If not found, check if it's a wrapped handler (from once/within).
-    const wrapper = this.wrapperMap.get(handler)
+    const wrapper = this._wrapper_map.get(handler)
     if (wrapper) {
       handlers.delete(wrapper)
-      this.wrapperMap.delete(handler)
+      this._wrapper_map.delete(handler)
+    }
+  }
+
+  /**
+   * Removes all handlers for a specific event, or all handlers if no event specified.
+   * @param eventName  Optional event name to clear handlers for
+   */
+  public clear_listeners <K extends keyof T> (eventName? : K) : void {
+    if (eventName !== undefined) {
+      this._event_map.delete(eventName)
+    } else {
+      this._event_map.clear()
     }
   }
 }

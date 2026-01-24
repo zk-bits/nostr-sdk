@@ -22,11 +22,11 @@ export default async function relay_feature_tests (t: Test) {
       const relay = new NostrRelay()
 
       await relay.start({ port: TEST_PORTS.RELAY.FEATURE })
-      t.ok(relay.ready, 'relay is ready after start')
+      t.ok(relay.is_ready, 'relay is ready after start')
 
       relay.stop()
       await wait_ms(100)
-      t.notOk(relay.ready, 'relay not ready after stop')
+      t.notOk(relay.is_ready, 'relay not ready after stop')
       t.end()
     })
 
