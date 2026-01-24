@@ -36,7 +36,7 @@ export default async function subscription_stress_tests (t: Test) {
       const sub = socket.subscribe(filter)
       await sub.activate()
 
-      const listener = sub.listen(5000)
+      const listener = sub.listen({ mode: 'timeout', duration: 5000 })
 
       // Publish many events
       const count = 100
@@ -69,7 +69,7 @@ export default async function subscription_stress_tests (t: Test) {
       await sub.activate()
 
       // Start listener
-      const listener = sub.listen(3000)
+      const listener = sub.listen({ mode: 'timeout', duration: 3000 })
 
       // Rapid-fire publish
       const events = create_event_stream(50, { pubkey, seckey })
@@ -106,7 +106,7 @@ export default async function subscription_stress_tests (t: Test) {
       await Promise.all(subs.map(s => s.activate()))
 
       // All listen concurrently
-      const listeners = subs.map(s => s.listen(2000))
+      const listeners = subs.map(s => s.listen({ mode: 'timeout', duration: 2000 }))
 
       // Publish events
       const events = create_event_stream(10, { pubkey, seckey })
@@ -171,7 +171,7 @@ export default async function subscription_stress_tests (t: Test) {
       // Create many sequential listeners
       const listenerCount = 20
       for (let i = 0; i < listenerCount; i++) {
-        const listener = sub.listen(50)
+        const listener = sub.listen({ mode: 'timeout', duration: 50 })
         await listener
       }
 
@@ -228,7 +228,7 @@ export default async function subscription_stress_tests (t: Test) {
       const events = create_event_stream(eventCount, { pubkey, seckey })
 
       const startCount = sub.state.count
-      const listener = sub.listen(3000)
+      const listener = sub.listen({ mode: 'timeout', duration: 3000 })
 
       // Publish events
       for (const event of events) {

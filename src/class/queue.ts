@@ -10,8 +10,9 @@ export class MessageQueue {
 
   private readonly _socket : NostrSocket
 
-  private _queue : ClientMessage[] = []
-  private _timer : NodeJS.Timeout | undefined
+  private _queue    : ClientMessage[] = []
+  private _timer    : NodeJS.Timeout | undefined
+  private _flushing : boolean = false
 
   /**
    * Creates a new message queue.
@@ -33,18 +34,35 @@ export class MessageQueue {
   }
 
   private _schedule () {
-    // If the queue has one entry or less,
-    if (this.size <= 1) {
-      // Clear the timeout if it exists.
-      clearTimeout(this._timer)
-    } else {
+    // If already flushing or timer exists, skip.
+    if (this._flushing || this._timer) return
+    // If the queue is empty, return.
+    if (this.size === 0) return
+    // Mark as flushing and defer processing to allow batch accumulation.
+    this._flushing = true
+    // Use setImmediate (Node.js) or setTimeout(0) to defer to next tick.
+    const defer = typeof setImmediate !== 'undefined' ? setImmediate : (fn: () => void) => setTimeout(fn, 0)
+    defer(() => this._flush())
+  }
+
+  private _flush () {
+    // Process a batch of messages.
+    this._process()
+    // If there are more messages, schedule the next batch.
+    if (this.size > 0) {
       // Get the queue interval.
       const ival = this._socket.config.queue_ival
-      // Set a new timeout.
-      this._timer = setTimeout(() => this._schedule(), ival)
+      // Set a new timeout for the next batch.
+      this._timer = setTimeout(() => {
+        this._timer = undefined
+        this._flush()
+      }, ival)
+      // Don't block process exit while waiting to flush.
+      this._timer.unref()
+    } else {
+      // Done flushing.
+      this._flushing = false
     }
-    // Process the queue.
-    this._process()
   }
 
   private _process () {
@@ -52,16 +70,22 @@ export class MessageQueue {
     if (this.size === 0) return
     // Check WebSocket is open before sending.
     if (this._socket.ws.readyState !== WebSocket.OPEN) return
-    // Get the first message from the queue.
-    const msg = this._queue.shift()
-    // If the message is not defined, return.
-    if (!msg) return
-    // Send the message to the socket.
-    try {
-      this._socket._send(msg)
-    } catch {
-      // Re-queue the message on failure.
-      this._queue.unshift(msg)
+    // Get the batch limit.
+    const limit = this._socket.config.queue_limit
+    // Send up to limit messages.
+    for (let i = 0; i < limit && this.size > 0; i++) {
+      // Get the first message from the queue.
+      const msg = this._queue.shift()
+      // If the message is not defined, break.
+      if (!msg) break
+      // Send the message to the socket.
+      try {
+        this._socket._send(msg)
+      } catch {
+        // Re-queue the message on failure and stop.
+        this._queue.unshift(msg)
+        break
+      }
     }
   }
 
@@ -71,6 +95,8 @@ export class MessageQueue {
     this._queue = []
     // Clear the timeout if it exists.
     clearTimeout(this._timer)
+    this._timer = undefined
+    this._flushing = false
   }
 
   /**

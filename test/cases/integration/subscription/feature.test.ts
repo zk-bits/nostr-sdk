@@ -107,7 +107,7 @@ export default async function subscription_feature_tests (t: Test) {
 
       const sub = socket.subscribe(filter)
       const received: any[] = []
-      sub.on('event', (e) => received.push(e))
+      sub.on('event', (e) => { received.push(e) })
 
       await sub.activate()
 
@@ -133,7 +133,7 @@ export default async function subscription_feature_tests (t: Test) {
       const sub = socket.subscribe(filter)
       await sub.activate()
 
-      const listener = sub.listen(1000)
+      const listener = sub.listen({ mode: 'timeout', duration: 1000 })
 
       const event1 = sign_event(create_event({ content: 'one', kind: 1, pubkey }), seckey)
       const event2 = sign_event(create_event({ content: 'two', kind: 1, pubkey }), seckey)
@@ -162,7 +162,7 @@ export default async function subscription_feature_tests (t: Test) {
       await sub.activate()
 
       const received: any[] = []
-      sub.on('event', (e) => received.push(e))
+      sub.on('event', (e) => { received.push(e) })
 
       sub.cancel()
       t.notOk(sub.is_active, 'subscription inactive after unsubscribe')
@@ -197,8 +197,8 @@ export default async function subscription_feature_tests (t: Test) {
       const received1: any[] = []
       const received2: any[] = []
 
-      sub.on('event', (e) => received1.push(e))
-      sub.on('event', (e) => received2.push(e))
+      sub.on('event', (e) => { received1.push(e) })
+      sub.on('event', (e) => { received2.push(e) })
 
       await sub.activate()
 
@@ -226,8 +226,8 @@ export default async function subscription_feature_tests (t: Test) {
       const received1: any[] = []
       const received2: any[] = []
 
-      const handler1 = (e: any) => received1.push(e)
-      const handler2 = (e: any) => received2.push(e)
+      const handler1 = (e: any) => { received1.push(e) }
+      const handler2 = (e: any) => { received2.push(e) }
 
       sub.on('event', handler1)
       sub.on('event', handler2)
@@ -276,7 +276,7 @@ export default async function subscription_feature_tests (t: Test) {
       t.ok(sub2.is_active, 'second subscription active')
 
       const received: any[] = []
-      sub2.on('event', (e) => received.push(e))
+      sub2.on('event', (e) => { received.push(e) })
 
       const event = sign_event(create_event({ content: 'resubscribe', kind: 1, pubkey }), seckey)
       await socket.publish(event)

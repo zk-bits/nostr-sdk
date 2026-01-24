@@ -20,6 +20,8 @@ import {
 import { gen_seckey, get_pubkey } from '@/crypto/ecc.js'
 import { PROTOCOL_VERSION }       from '@/const.js'
 
+import type { RequestRpcMessage, RpcMessageEnvelope } from '@/types/rpc.js'
+
 export default function rpc_tests (t: Test) {
   t.test('gen_message_id', st => {
     st.test('generates string ID', t => {
@@ -212,7 +214,7 @@ export default function rpc_tests (t: Test) {
         bob_pub,
         alice_sec
       )
-      const unwrapped = unwrap_rpc_message(wrapped, bob_sec)
+      const unwrapped = unwrap_rpc_message(wrapped, bob_sec) as RpcMessageEnvelope<RequestRpcMessage>
 
       t.equal(unwrapped.method, message.method, 'method preserved')
       t.deepEqual(unwrapped.params, message.params, 'params preserved')

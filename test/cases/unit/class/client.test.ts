@@ -68,10 +68,10 @@ export default function client_tests (t: Test) {
 
       const client = new NostrClient([ socket1, socket2 ])
 
-      t.notOk(client.ready, 'not ready initially')
+      t.notOk(client.is_ready, 'not ready initially')
 
       mock1.simulateOpen()
-      t.ok(client.ready, 'ready after first socket opens')
+      t.ok(client.is_ready, 'ready after first socket opens')
 
       client.close()
       t.end()

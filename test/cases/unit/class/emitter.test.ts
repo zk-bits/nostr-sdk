@@ -26,8 +26,8 @@ export default function emitter_tests (t: Test) {
       const emitter  = new EventEmitter<TestEvents>()
       const messages: string[] = []
 
-      emitter.on('message', (msg) => messages.push('a:' + msg))
-      emitter.on('message', (msg) => messages.push('b:' + msg))
+      emitter.on('message', (msg) => { messages.push(`a:${msg}`) })
+      emitter.on('message', (msg) => { messages.push(`b:${msg}`) })
       emitter.emit('message', 'test')
 
       t.deepEqual(messages, ['a:test', 'b:test'], 'both handlers called')
@@ -51,8 +51,8 @@ export default function emitter_tests (t: Test) {
       const emitter  = new EventEmitter<TestEvents>()
       const messages: string[] = []
 
-      const handler1 = (msg: string) => messages.push('a:' + msg)
-      const handler2 = (msg: string) => messages.push('b:' + msg)
+      const handler1 = (msg: string) => { messages.push(`a:${msg}`) }
+      const handler2 = (msg: string) => { messages.push(`b:${msg}`) }
 
       emitter.on('message', handler1)
       emitter.on('message', handler2)
@@ -105,7 +105,7 @@ export default function emitter_tests (t: Test) {
       const messages: string[] = []
 
       // within is like "once with timeout" - fires once then removes handler
-      emitter.within('message', (msg) => messages.push(msg), 100)
+      emitter.within('message', (msg) => { messages.push(msg) }, 100)
       emitter.emit('message', 'immediate')
 
       await new Promise(r => setTimeout(r, 50))
@@ -120,7 +120,7 @@ export default function emitter_tests (t: Test) {
       const emitter  = new EventEmitter<TestEvents>()
       const messages: string[] = []
 
-      emitter.within('message', (msg) => messages.push(msg), 50)
+      emitter.within('message', (msg) => { messages.push(msg) }, 50)
 
       await new Promise(r => setTimeout(r, 100))
       emitter.emit('message', 'after')
@@ -133,8 +133,8 @@ export default function emitter_tests (t: Test) {
       const emitter  = new EventEmitter<TestEvents>()
       const received: string[] = []
 
-      emitter.on('message', (msg) => received.push('1:' + msg))
-      emitter.on('message', (msg) => received.push('2:' + msg))
+      emitter.on('message', (msg) => { received.push(`1:${msg}`) })
+      emitter.on('message', (msg) => { received.push(`2:${msg}`) })
       emitter.emit('message', 'test')
 
       t.equal(received.length, 2, 'all handlers called')
@@ -163,7 +163,7 @@ export default function emitter_tests (t: Test) {
       const emitter  = new EventEmitter<TestEvents>()
       const received: Array<[string, any[]]> = []
 
-      emitter.all((topic, ...args) => received.push([topic as string, args]))
+      emitter.all((topic, ...args) => { received.push([topic as string, args]) })
       emitter.emit('message', 'hello')
       emitter.emit('data', 42, 'world')
 

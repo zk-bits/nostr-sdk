@@ -197,7 +197,7 @@ export default async function client_feature_tests (t: Test) {
       await sub.activate()
 
       const received: any[] = []
-      sub.on('event', (e) => received.push(e))
+      sub.on('event', (e) => { received.push(e) })
 
       const event = sign_event(create_event({ content: 'subscribe test', kind: 1, pubkey }), seckey)
       await client.publish(event)
@@ -221,7 +221,7 @@ export default async function client_feature_tests (t: Test) {
       await sub.activate()
 
       const received: any[] = []
-      sub.on('event', (e) => received.push(e))
+      sub.on('event', (e) => { received.push(e) })
 
       // Publish event (goes to both relays)
       const event = sign_event(create_event({ content: 'dedup test', kind: 1, pubkey }), seckey)

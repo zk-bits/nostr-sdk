@@ -186,7 +186,7 @@ export default async function relay_failure_tests (t: Test) {
 
       // Start subscription and publish simultaneously
       const sub = socket.subscribe(filter)
-      const listener = sub.listen(1000)
+      const listener = sub.listen({ mode: 'timeout', duration: 1000 })
 
       const events = Array.from({ length: 5 }, (_, i) =>
         sign_event(create_event({ content: `concurrent ${i}`, kind: 1, pubkey }), seckey)

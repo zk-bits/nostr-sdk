@@ -3,7 +3,6 @@ import { TEST_URLS }   from '#/config.js'
 
 import { gen_seckey, get_pubkey }   from '@/crypto/ecc.js'
 import { create_event, sign_event } from '@/lib/event.js'
-import { match_filter } from '@/lib/filter.js'
 import { sleep }                    from '@/lib/util.js'
 import { EventFilter, EventTemplate } from '@/types/event.js'
 

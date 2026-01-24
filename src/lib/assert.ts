@@ -8,7 +8,7 @@ export function assert_ok (
   value    : unknown,
   message ?: string
 ) : asserts value {
-  if (value === false) {
+  if (!value) {
     throw new Error(message ?? 'Assertion failed!')
   }
 }

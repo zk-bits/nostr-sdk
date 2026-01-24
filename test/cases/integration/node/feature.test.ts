@@ -44,8 +44,8 @@ export default async function node_feature_tests (t: Test) {
 
       await Promise.all([node1.connect(), node2.connect()])
 
-      t.ok(node1.ready, 'node1 ready')
-      t.ok(node2.ready, 'node2 ready')
+      t.ok(node1.is_ready, 'node1 ready')
+      t.ok(node2.is_ready, 'node2 ready')
 
       node1.close()
       node2.close()
@@ -78,12 +78,12 @@ export default async function node_feature_tests (t: Test) {
 
       const node1 = new NostrNode([pubkey2], urls, seckey1)
       await node1.connect()
-      t.ok(node1.ready, 'connected')
+      t.ok(node1.is_ready, 'connected')
 
       node1.close()
       await wait_ms(200)
 
-      t.notOk(node1.ready, 'disconnected')
+      t.notOk(node1.is_ready, 'disconnected')
       t.end()
     })
 

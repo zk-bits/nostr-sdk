@@ -24,7 +24,7 @@ export class MockWebSocket {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set())
     }
-    this.listeners.get(event)!.add(handler)
+    this.listeners.get(event)?.add(handler)
   }
 
   removeEventListener (event: string, handler: EventListener): void {
@@ -47,7 +47,7 @@ export class MockWebSocket {
   }
 
   private _emit (event: string, data: unknown): void {
-    this.listeners.get(event)?.forEach(handler => handler(data))
+    this.listeners.get(event)?.forEach(handler => { handler(data) })
   }
 
   // Test simulation methods

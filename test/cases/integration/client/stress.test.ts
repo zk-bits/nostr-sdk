@@ -207,7 +207,7 @@ export default async function client_stress_tests (t: Test) {
       await sub.activate()
 
       const received: any[] = []
-      sub.on('event', (e) => received.push(e))
+      sub.on('event', (e) => { received.push(e) })
 
       // Publish many events
       const eventCount = 100

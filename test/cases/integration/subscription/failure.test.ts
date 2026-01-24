@@ -53,7 +53,7 @@ export default async function subscription_failure_tests (t: Test) {
       await sub.activate()
 
       const start = Date.now()
-      const events = await sub.listen(0)
+      const events = await sub.listen({ mode: 'timeout', duration: 0 })
       const elapsed = Date.now() - start
 
       t.ok(Array.isArray(events), 'returns array')
@@ -97,7 +97,7 @@ export default async function subscription_failure_tests (t: Test) {
       const sub = socket.subscribe({ kinds: [1] })
       await sub.activate()
 
-      const listener = sub.listen(5000)
+      const listener = sub.listen({ mode: 'timeout', duration: 5000 })
 
       // Close socket after short delay
       setTimeout(() => socket.close(), 100)
@@ -221,7 +221,7 @@ export default async function subscription_failure_tests (t: Test) {
       await sub.activate()
       sub.cancel()
 
-      const events = await sub.listen(100)
+      const events = await sub.listen({ mode: 'timeout', duration: 100 })
       t.ok(Array.isArray(events), 'returns array')
       t.equal(events.length, 0, 'empty array for cancelled subscription')
 

@@ -85,7 +85,7 @@ export default function ecc_tests (t: Test) {
       const alice_sec = gen_seckey()
       const bob_sec   = gen_seckey()
       const bob_pub   = get_pubkey(bob_sec)
-      const bob_pub_compressed = '02' + bob_pub
+      const bob_pub_compressed = `02${bob_pub}`
 
       const shared = get_shared_secret(alice_sec, bob_pub_compressed)
       t.equal(shared.length, 64, 'returns valid shared secret')

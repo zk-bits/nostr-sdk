@@ -1,5 +1,5 @@
 import { Buff }       from '@vbyte/buff'
-import { cbc }        from '@noble/ciphers/aes'
+import { cbc }        from '@noble/ciphers/aes.js'
 import { chacha20 }   from '@noble/ciphers/chacha.js'
 import { equalBytes } from '@noble/ciphers/utils.js'
 
@@ -20,7 +20,8 @@ import {
 } from '@noble/hashes/utils.js'
 
 /**
- * Encrypts content using AES-GCM with an optional initialization vector.
+ * Encrypts content using AES-CBC mode (NIP-04).
+ * @deprecated NIP-04 is deprecated. Use nip44_encrypt() instead.
  * @param secret    Encryption key in hex format
  * @param content   Content to encrypt
  * @param iv        Optional initialization vector in hex format
@@ -52,8 +53,8 @@ export function nip04_decrypt (
   secret  : string,
   content : string
 ) {
-  const [ encryped, iv ] = content.split('?iv=')
-  const cbytes = decode_b64url(encryped)
+  const [ encrypted, iv ] = content.split('?iv=')
+  const cbytes = decode_b64url(encrypted)
   const sbytes = Buff.hex(secret)
   const vector = decode_b64url(iv)
   const decrypted = cbc(sbytes, vector).decrypt(cbytes)

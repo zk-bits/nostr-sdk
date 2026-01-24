@@ -39,16 +39,15 @@ export default function assert_tests (t: Test) {
       t.end()
     })
 
-    st.test('does NOT throw for falsy values except false', t => {
-      // Note: assert_ok specifically checks for === false, not other falsy values
-      t.doesNotThrow(() => assert_ok(0), '0 passes')
-      t.doesNotThrow(() => assert_ok(null), 'null passes')
-      t.doesNotThrow(() => assert_ok(undefined), 'undefined passes')
+    st.test('throws for falsy values', t => {
+      t.throws(() => assert_ok(0), /Assertion failed/, '0 throws')
+      t.throws(() => assert_ok(null), /Assertion failed/, 'null throws')
+      t.throws(() => assert_ok(undefined), /Assertion failed/, 'undefined throws')
       t.end()
     })
 
-    st.test('does NOT throw for empty string', t => {
-      t.doesNotThrow(() => assert_ok(''), 'empty string passes')
+    st.test('throws for empty string', t => {
+      t.throws(() => assert_ok(''), /Assertion failed/, 'empty string throws')
       t.end()
     })
 

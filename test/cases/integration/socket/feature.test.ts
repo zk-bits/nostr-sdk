@@ -176,7 +176,7 @@ export default async function socket_feature_tests (t: Test) {
       const sub = socket.subscribe(filter)
       await sub.activate()
 
-      const listener = sub.listen(2000)
+      const listener = sub.listen({ mode: 'timeout', duration: 2000 })
 
       const event = sign_event(create_event({ content: 'subscribe test', kind: 1, pubkey }), seckey)
       await socket.publish(event)

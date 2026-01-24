@@ -240,7 +240,7 @@ export default async function socket_failure_tests (t: Test) {
       const socket = new NostrSocket(`ws://localhost:${TEST_PORTS.SOCKET.FAILURE + 11}`)
       let closeEmitted = false
 
-      socket.on('close', () => { closeEmitted = true })
+      socket.on('closed', () => { closeEmitted = true })
       await socket.connect()
 
       tempRelay.stop()

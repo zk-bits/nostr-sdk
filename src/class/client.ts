@@ -14,7 +14,8 @@ import type {
   EventFilter,
   SignedEvent,
   PublishResponse,
-  NostrClientConfig
+  NostrClientConfig,
+  SubscriptionFilterOptions
 } from '@/types/index.js'
 
 import {
@@ -89,6 +90,13 @@ export class NostrClient extends EventEmitter <{
     socket.once('ready', () => {
       if (!this._init) this._init = true
     })
+    // Listen for closed event and forward it.
+    socket.on('closed', () => {
+      this.emit('closed', socket)
+      // Check if all sockets are closed.
+      const all_closed = this.sockets.every(s => !s.is_ready)
+      if (all_closed) this._init = false
+    })
     // Add the socket to the sockets map.
     this._sockets.set(socket.url, socket)
     // Return the socket.
@@ -101,7 +109,7 @@ export class NostrClient extends EventEmitter <{
   }
 
   /** Whether any relay connection is ready. */
-  get ready () {
+  get is_ready () {
     return this._init
   }
 
@@ -165,15 +173,15 @@ export class NostrClient extends EventEmitter <{
   /**
    * Queries all relays for events, resolving on first response.
    * @param filters   Event filter(s) to match
-   * @param duration  Optional duration in ms to collect events
+   * @param options   Optional options for the subscription
    * @returns         Promise that resolves with the first relay's matching events
    */
   public async query (
     filters   : EventFilter | EventFilter[],
-    duration? : number
+    options?  : SubscriptionFilterOptions
   ) : Promise<SignedEvent[]> {
     // Create a set of queries.
-    const promises = this.sockets.map(socket => socket.query(filters, duration))
+    const promises = this.sockets.map(socket => socket.query(filters, options))
     // Return a promise that resolves when the first query is completed.
     return promise_any_with_context(promises, 'query', this.sockets)
   }

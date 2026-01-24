@@ -1,7 +1,6 @@
 /**
  * P2P communication node for encrypted RPC messaging over Nostr.
  * Provides one-to-one (request/respond) and one-to-many (cast/announce) patterns.
- * Currently in development - not yet ready for production.
  * @emits bounced  When an event fails decryption or filtering
  * @emits closed   When the node connection is closed
  * @emits error    When an error occurs
@@ -74,10 +73,11 @@ export class NostrNode extends EventEmitter<{
   private readonly _pubkey : string
   private readonly _seckey : string
 
-  private _active : boolean = false
-  private _init   : boolean = false
-  private _sub    : SubscriptionManager | null = null
-  private _timer  : NodeJS.Timeout | undefined
+  private _active     : boolean = false
+  private _connecting : boolean = false
+  private _init       : boolean = false
+  private _sub        : SubscriptionManager | null = null
+  private _timer      : NodeJS.Timeout | undefined
 
   /**
    * Creates a new NostrNode for P2P communication.
@@ -130,7 +130,7 @@ export class NostrNode extends EventEmitter<{
   }
 
   /** Whether the node is connected and subscription is active. */
-  get ready() {
+  get is_ready () {
     return this._init && this._active
   }
 
@@ -146,12 +146,19 @@ export class NostrNode extends EventEmitter<{
   }
 
   private _close () {
+    // Clear the timer if it exists.
+    if (this._timer) {
+      clearTimeout(this._timer)
+      this._timer = undefined
+    }
     // Clear the peers map.
     this._peers.clear()
     // Clear the client.
     this.client.close()
     // Set the ready state to false.
     this._active = false
+    // Clear the connecting flag.
+    this._connecting = false
     // Emit the closed event.
     this.emit('closed', this)
   }
@@ -176,6 +183,8 @@ export class NostrNode extends EventEmitter<{
     return new Promise((resolve, reject) => {
       // Message handler function.
       const handler = (message : RpcMessageData) => {
+        // Only accept 'accept' or 'reject' messages as valid responses.
+        if (message.type !== 'accept' && message.type !== 'reject') return
         // If the request_id is not the same, return.
         if (message.id !== filter.request_id) return
         // If the peer is in the list, add the message to the set.
@@ -209,10 +218,17 @@ export class NostrNode extends EventEmitter<{
   }
 
   private _on_cancel () {
-    // Clear the timeout.
-    clearTimeout(this._timer)
-    // Set a timeout to close the node if it is not active.
-    this._timer = setTimeout(() => { if (!this._active) this._close() }, this.config.sub_timeout)
+    // Clear existing timer.
+    if (this._timer) {
+      clearTimeout(this._timer)
+      this._timer = undefined
+    }
+    // Set _active to false immediately.
+    this._active = false
+    // Set timeout to close if not reactivated.
+    this._timer = setTimeout(() => {
+      if (!this._active) this._close()
+    }, this.config.sub_timeout)
     // Prevent timer from blocking process exit in Node.js.
     if (typeof this._timer.unref === 'function') this._timer.unref()
   }
@@ -269,7 +285,12 @@ export class NostrNode extends EventEmitter<{
 
   private async _subscribe () : Promise<void> {
     // Connect to the client.
-    await this.client.connect()
+    try {
+      await this.client.connect()
+    } catch (err) {
+      this.emit('error', 'connection failed', err)
+      throw err
+    }
     // If already subscribed, return early.
     if (this._sub) return
     // Create a list of authors to subscribe to.
@@ -295,11 +316,27 @@ export class NostrNode extends EventEmitter<{
   /** Connects to relays and starts listening for messages. */
   public connect () : Promise<void> {
     // If the node is already ready, return a resolved promise.
-    if (this.ready) return Promise.resolve()
+    if (this.is_ready) return Promise.resolve()
+    // If already connecting, wait for ready event instead of starting new connection.
+    if (this._connecting) {
+      return new Promise((resolve, reject) => {
+        const cleanup = () => { clearTimeout(timer); this.off('error', on_err) }
+        const on_err  = (err : unknown) => { cleanup(); reject(err) }
+        const timer = setTimeout(() => { cleanup(); reject(new Error('connection timed out')) }, this.config.msg_timeout)
+        this.once('ready', () => { cleanup(); resolve() })
+        this.on('error', on_err)
+      })
+    }
+    // Mark as connecting.
+    this._connecting = true
     // Otherwise, return a promise that resolves when the node is ready.
     return new Promise((resolve, reject) => {
       // Cleanup function to clear timeout and remove error listener.
-      const cleanup = () => { clearTimeout(timer); this.off('error', on_err) }
+      const cleanup = () => {
+        clearTimeout(timer)
+        this.off('error', on_err)
+        this._connecting = false
+      }
       // Error handler function.
       const on_err  = (err : unknown) => { cleanup(); reject(err) }
       // Set a timeout to reject the promise if the request times out.
@@ -344,8 +381,8 @@ export class NostrNode extends EventEmitter<{
     const filter = { request_id : payload.id, peers, ...options }
     // Listen for the messages.
     const listener = this._listen(filter)
-    // Send the messages to the peers.
-    peers.forEach(peer => this._send_message(payload, peer))
+    // Send the messages to the peers (catch errors to prevent unhandled rejections).
+    peers.forEach(peer => { this._send_message(payload, peer).catch(() => {}) })
     // Return the listener.
     return listener
   }
@@ -364,8 +401,8 @@ export class NostrNode extends EventEmitter<{
     const filter = { request_id : payload.id, peers : [ peer ], ...options }
     // Listen for the messages.
     const listener = this._listen(filter)
-    // Send the messages to the peers.
-    this._send_message(payload, peer)
+    // Send the messages to the peers (catch errors to prevent unhandled rejections).
+    this._send_message(payload, peer).catch(() => {})
     // Return the listener.
     return listener.then(messages => messages[0])
   }

@@ -194,7 +194,12 @@ export async function wait_for_ready (
   timeout : number = DEFAULT_TIMEOUT
 ): Promise<void> {
   if (socket.is_ready) return
-  await wait_for_event(socket, 'ready', timeout)
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error('Timeout waiting for socket ready'))
+    }, timeout)
+    socket.once('ready', () => { clearTimeout(timer); resolve() })
+  })
 }
 
 /**
@@ -207,7 +212,12 @@ export async function wait_for_closed (
   timeout : number = DEFAULT_TIMEOUT
 ): Promise<void> {
   if (!socket.is_ready) return
-  await wait_for_event(socket, 'close', timeout)
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error('Timeout waiting for socket close'))
+    }, timeout)
+    socket.once('closed', () => { clearTimeout(timer); resolve() })
+  })
 }
 
 /**
@@ -245,7 +255,7 @@ export async function wait_for_node_ready (
   node    : NostrNode,
   timeout : number = DEFAULT_TIMEOUT
 ): Promise<void> {
-  if (node.ready) return
+  if (node.is_ready) return
   await wait_for_event(node, 'ready', timeout)
 }
 

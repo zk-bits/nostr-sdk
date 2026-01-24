@@ -305,7 +305,7 @@ export default function util_crypto_tests (t: Test) {
 
     st.test('throws on invalid base64', t => {
       // Create a string that's the right length but invalid base64
-      const invalid = '!' + 'A'.repeat(131)
+      const invalid = `!${'A'.repeat(131)}`
 
       t.throws(() => decode_payload(invalid), 'throws on invalid base64')
       t.end()

@@ -165,7 +165,7 @@ export default async function socket_stress_tests (t: Test) {
       await sub.activate()
 
       // Listen and publish concurrently
-      const listener = sub.listen(3000)
+      const listener = sub.listen({ mode: 'timeout', duration: 3000 })
 
       const events = create_event_stream(50, { pubkey, seckey })
       await Promise.all(events.map(e => socket.publish(e)))

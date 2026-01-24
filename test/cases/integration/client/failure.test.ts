@@ -240,7 +240,7 @@ export default async function client_failure_tests (t: Test) {
 
       // Should still receive events through remaining relay
       const received: any[] = []
-      sub.on('event', (e) => received.push(e))
+      sub.on('event', (e) => { received.push(e) })
 
       const event = sign_event(create_event({ content: 'partial', kind: 1, pubkey }), seckey)
       await client.publish(event)

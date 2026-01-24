@@ -243,6 +243,11 @@ export class NostrRelay extends EventEmitter<{
     if (!this.ready) return
     // Print the stop message.
     this.log.info('relay stopping...')
+    // Close all client connections first to ensure they receive close frames.
+    for (const [ _, session ] of this.sessions) {
+      session.cleanup()
+      session.socket.close()
+    }
     // Close the websocket server.
     this.wss.close()
   }

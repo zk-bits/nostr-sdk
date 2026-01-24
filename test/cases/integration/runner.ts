@@ -1,44 +1,48 @@
 /**
  * Integration Test Runner
  *
- * Orchestrates all integration tests across feature, failure, and stress categories.
+ * Orchestrates feature and failure integration tests.
+ * Stress tests are run separately via: npm run test:stress
  */
 import tape from 'tape'
+import { setupTestEnvironment } from '#/helpers/setup.js'
+import { resetPortCounter } from '#/helpers/test-context.js'
+
+// Initialize test environment with global error handlers
+setupTestEnvironment()
+
+// Reset port counter for consistent port allocation
+resetPortCounter(9100)
 
 // ─────────────────────────────────────────────────────────────────
 // Relay Tests
 // ─────────────────────────────────────────────────────────────────
 import relay_feature from './relay/feature.test.js'
 import relay_failure from './relay/failure.test.js'
-import relay_stress  from './relay/stress.test.js'
 
 // ─────────────────────────────────────────────────────────────────
 // Socket Tests
 // ─────────────────────────────────────────────────────────────────
 import socket_feature from './socket/feature.test.js'
 import socket_failure from './socket/failure.test.js'
-import socket_stress  from './socket/stress.test.js'
 
 // ─────────────────────────────────────────────────────────────────
 // Subscription Tests
 // ─────────────────────────────────────────────────────────────────
 import subscription_feature from './subscription/feature.test.js'
 import subscription_failure from './subscription/failure.test.js'
-import subscription_stress  from './subscription/stress.test.js'
 
 // ─────────────────────────────────────────────────────────────────
 // Client Tests
 // ─────────────────────────────────────────────────────────────────
 import client_feature from './client/feature.test.js'
 import client_failure from './client/failure.test.js'
-import client_stress  from './client/stress.test.js'
 
 // ─────────────────────────────────────────────────────────────────
 // Node Tests
 // ─────────────────────────────────────────────────────────────────
 import node_feature from './node/feature.test.js'
 import node_failure from './node/failure.test.js'
-import node_stress  from './node/stress.test.js'
 
 // ═════════════════════════════════════════════════════════════════
 // Feature Tests (Happy Path)
@@ -99,30 +103,5 @@ tape('Node Failure Tests', async t => {
 })
 
 // ═════════════════════════════════════════════════════════════════
-// Stress Tests (Performance)
+// Note: Stress tests are run separately via: npm run test:stress
 // ═════════════════════════════════════════════════════════════════
-
-tape('Relay Stress Tests', async t => {
-  await relay_stress(t)
-  t.end()
-})
-
-tape('Socket Stress Tests', async t => {
-  await socket_stress(t)
-  t.end()
-})
-
-tape('Subscription Stress Tests', async t => {
-  await subscription_stress(t)
-  t.end()
-})
-
-tape('Client Stress Tests', async t => {
-  await client_stress(t)
-  t.end()
-})
-
-tape('Node Stress Tests', async t => {
-  await node_stress(t)
-  t.end()
-})

@@ -1,8 +1,7 @@
 import { Buff } from '@vbyte/buff'
 
-import { secp256k1 } from '@noble/curves/secp256k1'
-import { schnorr }   from '@noble/curves/secp256k1'
-import { mod }       from '@noble/curves/abstract/modular'
+import { secp256k1 } from '@noble/curves/secp256k1.js'
+import { schnorr }   from '@noble/curves/secp256k1.js'
 
 /**
  * Generates a new secret key for use with secp256k1.
@@ -12,11 +11,11 @@ import { mod }       from '@noble/curves/abstract/modular'
 export function gen_seckey (
   secret ?: string
 ) : string {
-  let sbig = (secret !== undefined)
+  const sbig = (secret !== undefined)
     ? Buff.hex(secret).big
     : Buff.random(32).big
-  sbig = mod(sbig, secp256k1.CURVE.n)
-  return Buff.big(sbig).hex
+  const reduced = secp256k1.Point.Fn.create(sbig)
+  return Buff.big(reduced, 32).hex
 }
 
 /**
@@ -27,7 +26,7 @@ export function gen_seckey (
 export function get_pubkey (
   seckey : string
 ) : string {
-  const pbytes = schnorr.getPublicKey(seckey)
+  const pbytes = schnorr.getPublicKey(Buff.hex(seckey))
   return new Buff(pbytes).hex
 }
 
@@ -41,8 +40,8 @@ export function get_shared_secret (
   seckey  : string,
   peer_pk : string
 ) : string {
-  const pubkey = (peer_pk.length === 66)? peer_pk : `02${peer_pk}`
-  const sbytes = secp256k1.getSharedSecret(seckey, pubkey, true)
+  const pubkey = (peer_pk.length === 66) ? peer_pk : `02${peer_pk}`
+  const sbytes = secp256k1.getSharedSecret(Buff.hex(seckey), Buff.hex(pubkey), true)
   return new Buff(sbytes).slice(1).hex
 }
 
@@ -56,7 +55,7 @@ export function create_signature (
   seckey  : string,
   message : string
 ) {
-  const sig = schnorr.sign(message, seckey)
+  const sig = schnorr.sign(Buff.hex(message), Buff.hex(seckey))
   return new Buff(sig).hex
 }
 
@@ -72,5 +71,5 @@ export function verify_signature (
   pubkey    : string,
   signature : string
 ) {
-  return schnorr.verify(signature, message, pubkey)
+  return schnorr.verify(Buff.hex(signature), Buff.hex(message), Buff.hex(pubkey))
 }

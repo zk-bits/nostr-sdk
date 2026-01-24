@@ -20,7 +20,7 @@ export interface NostrSocketEvent extends Record<string, any[]> {
   bounce  : [ RelayEventMessage   ],
   closed  : [ NostrSocket         ],
   eose    : [ RelayEOSEMessage    ],
-  error   : [ unknown, unknown    ],
+  error   : [ string              ],
   event   : [ RelayEventMessage   ],
   message : [ RelayMessage        ],
   notice  : [ string              ],

@@ -7,6 +7,25 @@ import type { EventConfig, EventFilter, SignedEvent } from '@/types/index.js'
 // Re-export MockWebSocket from mock-socket module
 export { MockWebSocket, createAutoOpenMockSocket } from './mock-socket.js'
 
+// Re-export test infrastructure
+export { ResourceTracker, getGlobalTracker, cleanupGlobalTracker } from './resource-tracker.js'
+export {
+  TestContext,
+  createTestContext,
+  resetPortCounter,
+  withContext,
+  withTimeout,
+  createDeferred,
+  DEFAULT_TEST_TIMEOUT
+} from './test-context.js'
+export {
+  setupTestEnvironment,
+  suppressRejectionWarnings,
+  enableRejectionWarnings,
+  withSuppressedWarnings,
+  assertNoUnhandledRejections
+} from './setup.js'
+
 /**
  * Generates a test keypair for signing events.
  * @returns Object with seckey (hex) and pubkey (hex)
@@ -32,7 +51,6 @@ export function createTestEvent (
   const template = create_event({
     content    : 'Test content',
     kind       : 1,
-    pubkey     : keypair.pubkey,
     created_at : now(),
     tags       : [],
     ...overrides,

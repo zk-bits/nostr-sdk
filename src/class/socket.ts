@@ -16,7 +16,8 @@ import type {
   RelayReceiptMessage,
   NostrSocketEvent,
   RelayNoticeMessage,
-  RelayEventMessage
+  RelayEventMessage,
+  SubscriptionFilterOptions
 } from '@/types/index.js'
 
 /** Default configuration for NostrSocket instances. */
@@ -45,9 +46,10 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
   private readonly _subs   : Map<string, NostrSubscription> = new Map()
   private readonly _url    : string
 
-  private _closeTimer : NodeJS.Timeout | undefined
-  private _init       : boolean = false
-  private _ws         : WebSocket
+  private _closeTimer  : NodeJS.Timeout | undefined
+  private _connecting  : boolean = false
+  private _init        : boolean = false
+  private _ws          : WebSocket
 
   /**
    * Creates a new NostrSocket connection to a relay.
@@ -124,15 +126,15 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
     this._subs.clear()
     // Set the socket to not initialized.
     this._init = false
+    // Clear the connecting flag.
+    this._connecting = false
     // Emit a closed event.
     this.emit('closed', this)
   }
 
   private _error (error : unknown) {
-    // Log the error to console.
-    console.error(error)
     // Emit an error event.
-    this.emit('error', null, String(error))
+    this.emit('error', String(error))
   }
 
   private _event (msg : RelayEventMessage) {
@@ -195,6 +197,8 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
   public close (delay : number = 100) {
     // Clear any existing close timer to prevent multiple close attempts.
     clearTimeout(this._closeTimer)
+    // Mark socket as closed immediately so new operations fail.
+    this._init = false
     // Setup a timer to close the connection.
     this._closeTimer = setTimeout(() => {
       // If the websocket connection is open,
@@ -203,6 +207,8 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
         this.ws.close()
       }
     }, delay)
+    // Don't block process exit while waiting to close.
+    this._closeTimer.unref()
   }
 
   /**
@@ -213,16 +219,36 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
   public async connect () : Promise<void> {
     // If the socket is already connected, return.
     if (this.is_ready) return
+    // If the socket is closing or closed, reject immediately.
+    const state = this.ws.readyState
+    if (state === WebSocket.CLOSING || state === WebSocket.CLOSED) {
+      throw new Error(`socket is closed for ${this.url}`)
+    }
+    // If already connecting, wait for ready event instead of starting new connection.
+    if (this._connecting) {
+      return new Promise((resolve, reject) => {
+        const timeout = this.config.msg_timeout
+        const timer = setTimeout(() => reject(new Error(`connection timeout for ${this.url}`)), timeout)
+        this.within('ready', () => { clearTimeout(timer); resolve() }, timeout)
+      })
+    }
+    // Mark as connecting.
+    this._connecting = true
     // Define the connection timeout.
     const timeout = this.config.msg_timeout
     // Create a promise to resolve the connection.
     return new Promise((resolve, reject) => {
       // Set a timeout to reject the promise if the connection times out.
-      const timer = setTimeout(() => reject(new Error(`connection timeout for ${this.url}`)), timeout)
+      const timer = setTimeout(() => {
+        this._connecting = false
+        reject(new Error(`connection timeout for ${this.url}`))
+      }, timeout)
       // Connect the socket.
       this.within('ready', () => {
         // Clear the timeout.
         clearTimeout(timer)
+        // Clear connecting flag.
+        this._connecting = false
         // Resolve the promise.
         resolve()
       }, timeout)
@@ -283,19 +309,19 @@ export class NostrSocket extends EventEmitter <NostrSocketEvent> {
    * Queries the relay for events matching the filters.
    * Creates a temporary subscription that closes after receiving events.
    * @param filters   Event filter(s) to match
-   * @param duration  Optional duration in ms to collect events
+   * @param options   Optional options for the subscription
    * @returns         Promise that resolves with matching events
    */
   public async query (
-    filters   : EventFilter | EventFilter[],
-    duration? : number
+    filters  : EventFilter | EventFilter[],
+    options? : SubscriptionFilterOptions
   ) : Promise<SignedEvent[]> {
     // Ensure socket is connected before querying.
     await this.connect()
     // Create a new subscription.
     const sub = new NostrSubscription(filters, this)
     // Return the promise with the results.
-    return sub.listen(duration).then((events) => {
+    return sub.listen(options).then((events) => {
       // Unsubscribe from the subscription.
       sub.cancel()
       // Resolve the promise with the events.

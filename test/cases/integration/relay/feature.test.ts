@@ -129,7 +129,7 @@ export default async function relay_feature_tests (t: Test) {
       const filter = { kinds: [1], authors: [pubkey] }
 
       const sub = await socket2.subscribe(filter)
-      const listener = sub.listen(2000)
+      const listener = sub.listen({ mode: 'timeout', duration: 2000 })
 
       const event = sign_event(create_event({ content: 'broadcast test', kind: 1, pubkey }), seckey)
       await socket1.publish(event)

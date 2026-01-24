@@ -198,6 +198,7 @@ export default function parse_tests (t: Test) {
 
       const queryResponse: QueryResponse = {
         ok     : true,
+        relay  : 'wss://test.relay',
         events : [event]
       }
 
@@ -212,7 +213,9 @@ export default function parse_tests (t: Test) {
     st.test('throws when query fails (res.ok = false)', async t => {
       const queryResponse: QueryResponse = {
         ok     : false,
-        reason : 'connection failed'
+        relay  : 'wss://test.relay',
+        reason : 'connection failed',
+        events : []
       }
 
       try {
@@ -227,6 +230,7 @@ export default function parse_tests (t: Test) {
     st.test('throws when no events found', async t => {
       const queryResponse: QueryResponse = {
         ok     : true,
+        relay  : 'wss://test.relay',
         events : []
       }
 
@@ -253,6 +257,7 @@ export default function parse_tests (t: Test) {
 
       const queryResponse: QueryResponse = {
         ok     : true,
+        relay  : 'wss://test.relay',
         events : [event]
       }
 
@@ -289,6 +294,7 @@ export default function parse_tests (t: Test) {
 
       const queryResponse: QueryResponse = {
         ok     : true,
+        relay  : 'wss://test.relay',
         events : [invalidEvent, validEvent]
       }
 
@@ -324,6 +330,7 @@ export default function parse_tests (t: Test) {
 
       const queryResponse: QueryResponse = {
         ok     : true,
+        relay  : 'wss://test.relay',
         events : [invalidSchemaEvent, validEvent]
       }
 

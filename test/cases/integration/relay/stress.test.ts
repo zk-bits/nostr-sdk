@@ -237,7 +237,7 @@ export default async function relay_stress_tests (t: Test) {
       await Promise.all(subs.map(s => s.activate()))
 
       // Collect events from each subscriber
-      const listeners = subs.map(s => s.listen(2000))
+      const listeners = subs.map(s => s.listen({ mode: 'timeout', duration: 2000 }))
 
       // Publish multiple events
       const events = create_event_stream(5, { pubkey, seckey })

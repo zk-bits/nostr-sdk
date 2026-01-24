@@ -6,7 +6,7 @@ export interface EventFilter {
   since   ?: number
   until   ?: number
   limit   ?: number
-  [ key : string ] : any
+  [ key : string ] : string[] | string | number | number[] | undefined
 }
 
 /** Configuration for creating a new event. */

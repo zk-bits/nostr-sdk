@@ -7,22 +7,29 @@
 import { Test }       from 'tape'
 import { NostrRelay } from '@/class/relay.js'
 import { NostrNode }  from '@/class/node.js'
-import { TEST_PORTS, FAILURE_CONFIG } from '#/config.js'
+import { FAILURE_CONFIG } from '#/config.js'
 
 import { gen_seckey, get_pubkey } from '@/crypto/ecc.js'
 import { wait_ms } from '#/cases/integration/helpers/fixtures.js'
+import { ResourceTracker } from '#/helpers/resource-tracker.js'
+import { createTestContext } from '#/helpers/test-context.js'
+import { withSuppressedWarnings } from '#/helpers/setup.js'
 
 
 export default async function node_failure_tests (t: Test) {
-  const relay1 = new NostrRelay()
-  const relay2 = new NostrRelay()
+  // Create isolated test context with automatic port allocation
+  const ctx = createTestContext()
+  const tracker = new ResourceTracker()
 
-  await relay1.start({ port: TEST_PORTS.NODE.RELAY_1 + 10 })
-  await relay2.start({ port: TEST_PORTS.NODE.RELAY_2 + 10 })
+  // Start relays using the tracker for automatic cleanup
+  const port1 = ctx.nextPort()
+  const port2 = ctx.nextPort()
+  await tracker.createRelay(port1)
+  await tracker.createRelay(port2)
 
   const urls = [
-    `ws://localhost:${TEST_PORTS.NODE.RELAY_1 + 10}`,
-    `ws://localhost:${TEST_PORTS.NODE.RELAY_2 + 10}`
+    `ws://localhost:${port1}`,
+    `ws://localhost:${port2}`
   ]
 
   // ───────────────────────────────────────────────────────────────
@@ -191,8 +198,10 @@ export default async function node_failure_tests (t: Test) {
 
   t.test('Node Relay Failure', async st => {
     st.test('emits closed event on relay shutdown', async t => {
+      // Use a unique port for this temp relay
+      const tempPort = ctx.nextPort()
       const tempRelay = new NostrRelay()
-      await tempRelay.start({ port: TEST_PORTS.NODE.RELAY_1 + 20 })
+      await tempRelay.start({ port: tempPort })
 
       const seckey = gen_seckey()
       const peer   = gen_seckey()
@@ -200,7 +209,7 @@ export default async function node_failure_tests (t: Test) {
 
       const node = new NostrNode(
         [pubkey],
-        [`ws://localhost:${TEST_PORTS.NODE.RELAY_1 + 20}`],
+        [`ws://localhost:${tempPort}`],
         seckey
       )
 
@@ -214,7 +223,7 @@ export default async function node_failure_tests (t: Test) {
       await wait_ms(1000)
 
       t.ok(closedEmitted, 'closed event emitted')
-      t.notOk(node.ready, 'node no longer ready')
+      t.notOk(node.is_ready, 'node no longer ready')
 
       node.close()
       t.end()
@@ -239,8 +248,7 @@ export default async function node_failure_tests (t: Test) {
 
       await Promise.all([node1.connect(), node2.connect()])
 
-      let _bounced = false
-      node2.on('bounced', () => { _bounced = true })
+      node2.on('bounced', () => { /* handler registered for test */ })
 
       // Note: Directly publishing malformed encrypted content would require
       // bypassing the normal message flow. This test verifies the bounced
@@ -318,14 +326,19 @@ export default async function node_failure_tests (t: Test) {
         t.pass('request after close fails')
       }
 
+      // Ensure node is fully closed to prevent lingering async operations
+      node.close()
+      await wait_ms(100)
       t.end()
     })
 
     st.end()
   })
 
-  t.teardown(() => {
-    relay1.stop()
-    relay2.stop()
+  t.teardown(async () => {
+    // Use suppressed warnings during cleanup to avoid noise from expected rejections
+    await withSuppressedWarnings(async () => {
+      await tracker.cleanup()
+    })
   })
 }

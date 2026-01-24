@@ -146,7 +146,7 @@ export function parse_rpc_message (
     const json = JSON.parse(payload)
     return SCHEMA.RPC.message_payload.parse(json)
   } catch (err) {
-    throw new Error('failed to parse message: ' + parse_error(err))
+    throw new Error(`failed to parse message: ${parse_error(err)}`)
   }
 }
 

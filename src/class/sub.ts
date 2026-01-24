@@ -11,7 +11,8 @@ import type {
   RelayClosedMessage,
   RelayEventMessage,
   RelayMessage,
-  SignedEvent
+  SignedEvent,
+  SubscriptionFilterOptions
 } from '@/types/index.js'
 
 /**
@@ -194,29 +195,40 @@ export class NostrSubscription extends EventEmitter <{
 
   /**
    * Listens for events on the subscription.
-   * If duration is provided, collects events for that duration.
-   * If duration is undefined, resolves immediately on first event or after msg_timeout.
-   * @param duration  Optional duration in ms to collect events
-   * @returns         Promise that resolves with collected events
+   * If mode is provided, collects events until EOSE or timeout.
+   * If mode is undefined, collects events until EOSE or timeout.
+   * @param options     Optional options for the subscription
+   * @returns           Promise that resolves with collected events
    */
-  public listen (duration? : number) : Promise<SignedEvent[]> {
+  public listen (options : SubscriptionFilterOptions = {}) : Promise<SignedEvent[]> {
+    // Define the mode.
+    const mode    = options.mode ?? 'eose'
+    // Define the timeout.
+    const timeout = options.duration ?? this.config.msg_timeout
     // Initialize the results array.
     const results : SignedEvent[] = []
-    // Define the timeout.
-    const timeout = duration ?? this.config.msg_timeout
     // If the subscription is not active, subscribe to the EOSE event.
     if (!this.is_active) this._subscribe()
     // Create a promise to resolve the events.
     return new Promise((resolve) => {
-      // Set a timeout to reject the promise if the request times out.
-      const timer = setTimeout(() => resolve(results), timeout)
-      // Subscribe to the event.
-      this.within('event', (event : SignedEvent) => {
-        // If a duration is not provided, resolve on first event.
-        if (!duration) { clearTimeout(timer); resolve([ event ]) }
-        // Add the event to the results.
-        results.push(event)
-      }, timeout)
+      // Track if already resolved to prevent double resolution.
+      let resolved = false
+      // Cleanup function to remove listener and resolve.
+      const finish = () => {
+        if (resolved) return
+        resolved = true
+        clearTimeout(timer)
+        this.off('event', handler)
+        resolve(results)
+      }
+      // Set a timeout to resolve with collected events.
+      const timer = setTimeout(finish, timeout)
+      // If no duration provided, resolve on EOSE (end of stored events).
+      if (mode !== 'timeout') this.within(mode, finish, timeout)
+      // Event handler to collect events.
+      const handler = (event : SignedEvent) => { results.push(event) }
+      // Subscribe to events using persistent listener.
+      this.on('event', handler)
     })
   }
 
